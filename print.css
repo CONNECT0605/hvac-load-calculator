@@ -1,0 +1,13 @@
+.print-only { display: none; }
+
+@media print {
+  #root { display: none !important; }
+  .print-only { display: block !important; color: #111; font-family: system-ui, sans-serif; font-size: 10pt; }
+  #print-report { max-width: none; }
+  .print-section { break-inside: avoid; margin: 0 0 16px; }
+  .print-section h2 { border-bottom: 1px solid #333; font-size: 13pt; margin: 16px 0 6px; padding-bottom: 3px; }
+  .print-section table { border-collapse: collapse; width: 100%; }
+  .print-section th, .print-section td { border: 1px solid #bbb; padding: 5px; text-align: left; vertical-align: top; }
+  .print-section th { background: #f1f1f1; width: 32%; }
+  .print-footer { border-top: 1px solid #333; margin-top: 20px; padding-top: 8px; }
+}

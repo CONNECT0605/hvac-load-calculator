@@ -1,4 +1,9 @@
 import { useState, useMemo } from "react";
+import { createProjectSnapshot, duplicateProject, listProjects, loadProject, saveProject } from "./project-storage.mjs";
+import { validateEquipmentCapacity, validateInputs } from "./ui-validation.mjs";
+import { buildReportData, ESTIMATE_NOTICES } from "./report-data.mjs";
+import { downloadCsv } from "./export-csv.mjs";
+import PrintReport from "./print-report.jsx";
 
 const INK = "#1C2530";
 const MUTED = "#6B7680";
@@ -441,7 +446,7 @@ function Breadcrumb({ screen, onJump }) {
 // =====================================================================
 // STEP: 機器選定(概算選定)
 // =====================================================================
-function EquipmentScreen({ calc, selection, setSelection, onNext, onBack }) {
+function EquipmentScreen({ calc, selection, setSelection, capacityValidation, onNext, onBack }) {
   const sizeInfo = PACKAGE_SIZES.find((p) => p.kw === selection.size) || PACKAGE_SIZES[1];
   const realModels = EQUIPMENT_DB[selection.size] || [];
   const isReal = realModels.length > 0;
@@ -505,6 +510,7 @@ function EquipmentScreen({ calc, selection, setSelection, onNext, onBack }) {
         <p className="text-xs mt-2" style={{ color: MUTED }}>
           ※ 台数・容量は自由に変更できます。実際の機種選定はゾーニング・配管長・室外機設置スペース・搬入経路等を踏まえた個別検討が必要です。
         </p>
+        {!capacityValidation.ok && <div className="mt-3 p-3 text-xs" style={{ border: `1px solid ${HEAT}`, color: HEAT }}>⚠ {capacityValidation.message} 価格比較へ進む前に、容量または台数を修正してください。</div>}
       </Panel>
 
       <Panel>
@@ -567,7 +573,7 @@ function EquipmentScreen({ calc, selection, setSelection, onNext, onBack }) {
 
       <div className="flex items-center justify-between">
         <button onClick={onBack} className="text-xs px-3 py-2" style={{ border: `1px solid ${RULE}`, color: INK }}>← 負荷計算に戻る</button>
-        <button onClick={onNext} className="text-sm px-4 py-2" style={{ background: INK, color: PAPER }}>価格比較へ進む →</button>
+        <button onClick={onNext} disabled={!capacityValidation.ok} className="text-sm px-4 py-2" style={{ background: capacityValidation.ok ? INK : RULE, color: PAPER, cursor: capacityValidation.ok ? "pointer" : "not-allowed" }}>価格比較へ進む →</button>
       </div>
     </div>
   );
@@ -576,7 +582,7 @@ function EquipmentScreen({ calc, selection, setSelection, onNext, onBack }) {
 // =====================================================================
 // STEP: 価格比較
 // =====================================================================
-function PricingScreen({ selection, quotes, strategies, onNext, onBack }) {
+function PricingScreen({ selection, quotes, strategies, selectedQuoteId, setChosenStrategyKey, onNext, onBack }) {
   const { cheapest, fastest, balanced } = strategies;
   const realModels = EQUIPMENT_DB[selection.size] || [];
 
@@ -645,6 +651,7 @@ function PricingScreen({ selection, quotes, strategies, onNext, onBack }) {
                 <th className="text-right font-normal py-2 pr-3" style={{ color: MUTED }}>{selection.count}台合計</th>
                 <th className="text-right font-normal py-2 pr-3" style={{ color: MUTED }}>送料</th>
                 <th className="text-right font-normal py-2 pr-3" style={{ color: MUTED }}>納期</th>
+                <th className="text-right font-normal py-2" style={{ color: MUTED }}>採用</th>
               </tr>
             </thead>
             <tbody>
@@ -664,12 +671,14 @@ function PricingScreen({ selection, quotes, strategies, onNext, onBack }) {
                     <td className="py-2 pr-3 text-right font-mono">{yen(q.totalUnitPrice)}</td>
                     <td className="py-2 pr-3 text-right font-mono">{q.shipping ? yen(q.shipping) : "無料(仮)"}</td>
                     <td className="py-2 pr-3 text-right font-mono">{q.leadDays}日(仮)</td>
+                    <td className="py-2 text-right"><button onClick={() => setChosenStrategyKey(q.id)} className="text-xs px-2 py-1" style={{ border: `1px solid ${q.id === selectedQuoteId ? INK : RULE}`, background: q.id === selectedQuoteId ? INK : "transparent", color: q.id === selectedQuoteId ? PAPER : INK }}>{q.id === selectedQuoteId ? "採用中" : "採用する"}</button></td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+        <p className="text-xs mt-3" style={{ color: INK }}>採用案: {quotes.find((q) => q.id === selectedQuoteId)?.store || "未選択"}（sample）</p>
         <p className="text-xs mt-3" style={{ color: MUTED }}>
           評価ロジック: 「最安」は{selection.count}台合計+送料が最小のもの。「納期優先」は納期日数が最小のもの。「バランス」は価格・納期をそれぞれ最小〜最大で0〜1に正規化し、同じ重み(0.5 / 0.5)で合算したスコアが最小のもの。「最適」ではなく比較の一手法です。
         </p>
@@ -851,7 +860,7 @@ function InternalScreen({ selection, chosenQuote, costs, marginRate, setMarginRa
 // =====================================================================
 // STEP: 客先提示見積
 // =====================================================================
-function CustomerScreen({ buildingType, region, floorArea, occupants, selection, costs, marginRate, onBack }) {
+function CustomerScreen({ buildingType, region, floorArea, occupants, selection, costs, marginRate, report, onDownloadCsv, onPrint, onBack }) {
   const factor = 1 / (1 - marginRate);
   const rows = [
     { label: "空調機器", value: costs.equipment * factor },
@@ -892,6 +901,10 @@ function CustomerScreen({ buildingType, region, floorArea, occupants, selection,
 
       <div className="flex items-center justify-between">
         <button onClick={onBack} className="text-xs px-3 py-2" style={{ border: `1px solid ${RULE}`, color: INK }}>← 原価・利益率設定に戻る</button>
+        <div className="flex items-center gap-2">
+          <button onClick={onDownloadCsv} disabled={!report} className="text-xs px-3 py-2" style={{ border: `1px solid ${RULE}`, color: INK }}>CSV出力</button>
+          <button onClick={onPrint} disabled={!report} className="text-xs px-3 py-2" style={{ background: INK, color: PAPER }}>PDFとして印刷</button>
+        </div>
       </div>
     </div>
   );
@@ -902,6 +915,10 @@ function CustomerScreen({ buildingType, region, floorArea, occupants, selection,
 // =====================================================================
 export default function HVACCalculator() {
   const [screen, setScreen] = useState("calc");
+  const [projectId, setProjectId] = useState(null);
+  const [projectName, setProjectName] = useState("名称未設定の案件");
+  const [savedProjects, setSavedProjects] = useState(() => listProjects());
+  const [storageMessage, setStorageMessage] = useState("");
 
   const [buildingTypeId, setBuildingTypeId] = useState("restaurant");
   const [regionId, setRegionId] = useState("kanto");
@@ -1017,7 +1034,8 @@ export default function HVACCalculator() {
   const strategies = { cheapest, fastest, balanced };
 
   const [chosenStrategyKey, setChosenStrategyKey] = useState("balanced");
-  const chosenQuote = strategies[chosenStrategyKey] || balanced;
+  const chosenQuote = strategies[chosenStrategyKey] || quotes.find((q) => q.id === chosenStrategyKey) || balanced;
+  const selectedQuoteId = chosenQuote.id;
 
   // ---- 工事費概算 ----
   const costs = useMemo(() => {
@@ -1041,6 +1059,60 @@ export default function HVACCalculator() {
     return { install, electric, piping, constructionTotal, equipment, shipping, other, costTotal };
   }, [construction, selection, chosenQuote]);
 
+  const validation = validateInputs({ floorArea, floors, occupants, coolingSetTemp, heatingSetTemp });
+  const capacityValidation = result.status === "ok"
+    ? validateEquipmentCapacity({ requiredCapacityKW: result.requiredCapacityKW, selection })
+    : { ok: false, installedKW: 0, shortageKW: null, message: "有効な計算結果がありません。" };
+  const selectedQuoteWithLabel = {
+    ...chosenQuote,
+    strategyLabel: chosenQuote.id === cheapest.id ? "最安" : chosenQuote.id === fastest.id ? "納期優先" : chosenQuote.id === balanced.id ? "バランス" : "手動選択",
+  };
+  const currentInputs = {
+    buildingTypeId, regionId, floorArea, floors, occupants, coolingSetTemp, heatingSetTemp, marginPct,
+    selection, construction, marginRate, chosenStrategyKey,
+  };
+  const report = result.status === "ok" ? buildReportData({
+    project: { id: projectId, name: projectName }, input: currentInputs, result, selection, selectedQuote: selectedQuoteWithLabel,
+    costs, marginRate, buildingType, region, validation, capacityValidation,
+  }) : null;
+
+  const refreshProjects = () => setSavedProjects(listProjects());
+  const handleSaveProject = () => {
+    try {
+      const saved = saveProject({ projectId, projectName, inputs: currentInputs });
+      setProjectId(saved.projectId);
+      setProjectName(saved.projectName);
+      refreshProjects();
+      setStorageMessage("このブラウザに案件を保存しました。");
+    } catch (error) { setStorageMessage(error.message); }
+  };
+  const applyProject = (saved) => {
+    if (!saved) return;
+    const value = saved.inputs || {};
+    setProjectId(saved.projectId); setProjectName(saved.projectName);
+    if (value.buildingTypeId !== undefined) setBuildingTypeId(value.buildingTypeId);
+    if (value.regionId !== undefined) setRegionId(value.regionId);
+    if (value.floorArea !== undefined) setFloorArea(value.floorArea);
+    if (value.floors !== undefined) setFloors(value.floors);
+    if (value.occupants !== undefined) setOccupants(value.occupants);
+    if (value.coolingSetTemp !== undefined) setCoolingSetTemp(value.coolingSetTemp);
+    if (value.heatingSetTemp !== undefined) setHeatingSetTemp(value.heatingSetTemp);
+    if (value.marginPct !== undefined) setMarginPct(value.marginPct);
+    if (value.selection) setSelection(value.selection);
+    if (value.construction) setConstruction(value.construction);
+    if (value.marginRate !== undefined) setMarginRate(value.marginRate);
+    if (value.chosenStrategyKey !== undefined) setChosenStrategyKey(value.chosenStrategyKey);
+    setScreen("calc"); setStorageMessage("保存済み案件を読み込み、入力値から再計算しました。");
+  };
+  const handleDuplicateProject = () => {
+    if (!projectId) { setStorageMessage("複製するには、先に案件を保存してください。"); return; }
+    try { const copied = duplicateProject(projectId); refreshProjects(); applyProject(copied); setStorageMessage("案件を複製しました。"); }
+    catch (error) { setStorageMessage(error.message); }
+  };
+  const handleNewProject = () => {
+    setProjectId(null); setProjectName("名称未設定の案件"); setScreen("calc"); setStorageMessage("新規案件を開始しました。入力値は必要に応じて更新してください。");
+  };
+
   const goto = (s) => setScreen(s);
 
   return (
@@ -1048,7 +1120,7 @@ export default function HVACCalculator() {
       <div className="max-w-5xl mx-auto px-6 py-10">
         <div className="mb-2">
           <h1 className="text-2xl font-sans font-semibold tracking-tight" style={{ color: INK }}>
-            設備設計プレゼン用プロトタイプ
+            概算空調負荷・概算見積ツール
           </h1>
           <p className="text-sm mt-1" style={{ color: MUTED }}>
             建物条件 → 空調負荷計算 → 機器選定 → 価格比較 → 工事費概算 → 原価・利益率 → 客先向け概算見積
@@ -1058,7 +1130,16 @@ export default function HVACCalculator() {
           className="mb-6 px-4 py-3 text-xs leading-relaxed"
           style={{ borderLeft: `3px solid ${HEAT}`, background: PANEL, color: MUTED }}
         >
-          本ツールはデモ・プレゼン用のプロトタイプであり、実施設計・正式見積の代替にはなりません。機器の型式・仕様の一部はWeb検索により実在を確認していますが、価格・在庫・納期はサンプルデータまたは「要確認」です。
+          {ESTIMATE_NOTICES.join(" ")} 機器の型式・仕様の一部はWeb検索により実在を確認していますが、価格・在庫・納期はサンプルデータまたは「要確認」です。
+        </div>
+
+        <div className="mb-6 p-4 flex flex-wrap items-end gap-3" style={{ background: PANEL, border: `1px solid ${RULE}` }}>
+          <div><div className="text-xs mb-1" style={{ color: MUTED }}>案件名</div><input value={projectName} onChange={(e) => setProjectName(e.target.value)} className="text-sm px-2 py-1" style={{ border: `1px solid ${RULE}` }} /></div>
+          <button onClick={handleSaveProject} className="text-xs px-3 py-2" style={{ background: INK, color: PAPER }}>保存</button>
+          <button onClick={handleDuplicateProject} className="text-xs px-3 py-2" style={{ border: `1px solid ${RULE}`, color: INK }}>複製</button>
+          <button onClick={handleNewProject} className="text-xs px-3 py-2" style={{ border: `1px solid ${RULE}`, color: INK }}>新規案件</button>
+          <div><div className="text-xs mb-1" style={{ color: MUTED }}>保存済み案件</div><select value="" onChange={(e) => applyProject(loadProject(e.target.value))} className="text-sm px-2 py-1" style={{ border: `1px solid ${RULE}` }}><option value="">選択して読込</option>{savedProjects.map((item) => <option key={item.projectId} value={item.projectId}>{item.projectName}（{new Date(item.updatedAt).toLocaleString("ja-JP")}）</option>)}</select></div>
+          {storageMessage && <span className="text-xs" style={{ color: MUTED }}>{storageMessage}</span>}
         </div>
 
         <Breadcrumb screen={screen} onJump={goto} />
@@ -1098,6 +1179,8 @@ export default function HVACCalculator() {
               <p className="text-xs mt-2" style={{ color: MUTED }}>
                 「延床面積」は建物全体の合計値として1回のみ計算に使用します。「階数」は機種の階別配分表示にのみ使用し、負荷計算そのものには影響しません。「計画上の余裕」は初期値0%で、旧来の一律安全率(1.15倍)は撤廃しています。
               </p>
+              {validation.errors.length > 0 && <div className="mt-3 p-3 text-xs" style={{ border: `1px solid ${HEAT}`, color: HEAT }}>{validation.errors.map((message) => <div key={message}>⚠ {message}</div>)}</div>}
+              {validation.warnings.length > 0 && <div className="mt-3 p-3 text-xs" style={{ border: `1px solid ${NEED_CHECK}`, color: NEED_CHECK }}>{validation.warnings.map((message) => <div key={message}>⚠ {message}</div>)}</div>}
 
               <button onClick={() => setShowBasis((v) => !v)} className="mt-3 text-xs underline" style={{ color: MUTED }}>
                 {showBasis ? "計算根拠を隠す" : "計算根拠を表示"}
@@ -1239,8 +1322,9 @@ export default function HVACCalculator() {
                           setSelection({ size: result.recommended.size, count: result.recommended.count });
                           goto("equipment");
                         }}
+                        disabled={validation.errors.length > 0}
                         className="text-sm px-4 py-2"
-                        style={{ background: INK, color: PAPER }}
+                        style={{ background: validation.errors.length ? RULE : INK, color: PAPER, cursor: validation.errors.length ? "not-allowed" : "pointer" }}
                       >
                         この構成(推奨: {result.recommended.size.toFixed(1)}kW×{result.recommended.count}台)で機器選定へ進む
                       </button>
@@ -1257,6 +1341,7 @@ export default function HVACCalculator() {
             calc={result}
             selection={selection}
             setSelection={setSelection}
+            capacityValidation={capacityValidation}
             onNext={() => goto("pricing")}
             onBack={() => goto("calc")}
           />
@@ -1267,6 +1352,8 @@ export default function HVACCalculator() {
             selection={selection}
             quotes={quotes}
             strategies={strategies}
+            selectedQuoteId={selectedQuoteId}
+            setChosenStrategyKey={setChosenStrategyKey}
             onNext={() => goto("construction")}
             onBack={() => goto("equipment")}
           />
@@ -1304,9 +1391,13 @@ export default function HVACCalculator() {
             selection={selection}
             costs={costs}
             marginRate={marginRate}
+            report={report}
+            onDownloadCsv={() => report && downloadCsv(report, `${projectName || "hvac-estimate"}.csv`)}
+            onPrint={() => window.print()}
             onBack={() => goto("internal")}
           />
         )}
+        {report && <PrintReport report={report} />}
       </div>
     </div>
   );

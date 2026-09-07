@@ -1,0 +1,21 @@
+{
+  "name": "hvac-load-calculator",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "test": "node hvac-calc-engine.test.js",
+    "check:sync": "node hvac-calc-engine.sync-check.js"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  }
+}
