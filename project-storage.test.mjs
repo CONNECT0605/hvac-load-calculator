@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { STORAGE_KEY, createProjectSnapshot, duplicateProject, listProjects, loadProject, saveProject } from "./project-storage.mjs";
+import { STORAGE_KEY, createProjectSnapshot, deleteProject, duplicateProject, listProjects, loadProject, saveProject } from "./project-storage.mjs";
 
 const storage = (() => {
   const values = new Map();
@@ -12,6 +12,9 @@ assert.equal(loadProject(saved.projectId, storage).inputs.floorArea, 100);
 const duplicate = duplicateProject(saved.projectId, storage);
 assert.notEqual(duplicate.projectId, saved.projectId);
 assert.equal(duplicate.projectName, "日本語,案件 のコピー");
+assert.equal(listProjects(storage).length, 2);
+deleteProject(duplicate.projectId, storage);
+assert.equal(listProjects(storage).length, 1);
 storage.setItem(STORAGE_KEY, "壊れたJSON");
 assert.deepEqual(listProjects(storage), []);
 console.log("project-storage: PASS");

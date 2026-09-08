@@ -1,13 +1,68 @@
 .print-only { display: none; }
 
 @media print {
-  #root { display: none !important; }
-  .print-only { display: block !important; color: #111; font-family: system-ui, sans-serif; font-size: 10pt; }
-  #print-report { max-width: none; }
-  .print-section { break-inside: avoid; margin: 0 0 16px; }
-  .print-section h2 { border-bottom: 1px solid #333; font-size: 13pt; margin: 16px 0 6px; padding-bottom: 3px; }
-  .print-section table { border-collapse: collapse; width: 100%; }
-  .print-section th, .print-section td { border: 1px solid #bbb; padding: 5px; text-align: left; vertical-align: top; }
-  .print-section th { background: #f1f1f1; width: 32%; }
-  .print-footer { border-top: 1px solid #333; margin-top: 20px; padding-top: 8px; }
+  body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+    color: #111;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    font-size: 10pt;
+    line-height: 1.5;
+    background: #fff;
+    padding: 16px;
+  }
+  #print-report {
+    max-width: none;
+    margin: 0 auto;
+  }
+  #print-report h1 {
+    font-size: 16pt;
+    margin-bottom: 6px;
+    border-bottom: 2px solid #1c2530;
+    padding-bottom: 4px;
+    color: #1c2530;
+  }
+  .print-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin: 0 0 14px;
+  }
+  .print-section h2 {
+    border-bottom: 1px solid #333;
+    font-size: 11pt;
+    margin: 12px 0 4px;
+    padding-bottom: 2px;
+    color: #1c2530;
+  }
+  .print-section table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 4px;
+  }
+  .print-section th, .print-section td {
+    border: 1px solid #bbb;
+    padding: 4px 8px;
+    text-align: left;
+    vertical-align: top;
+    font-size: 9pt;
+  }
+  .print-section th {
+    background: #f1f4f1;
+    width: 30%;
+    font-weight: 600;
+  }
+  .print-footer {
+    border-top: 1px solid #333;
+    margin-top: 16px;
+    padding-top: 6px;
+    font-size: 8pt;
+    color: #555;
+  }
 }

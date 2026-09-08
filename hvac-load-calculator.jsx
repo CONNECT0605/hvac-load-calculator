@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { createProjectSnapshot, duplicateProject, listProjects, loadProject, saveProject } from "./project-storage.mjs";
+import { createProjectSnapshot, deleteProject, duplicateProject, listProjects, loadProject, saveProject } from "./project-storage.mjs";
+
 import { validateEquipmentCapacity, validateInputs } from "./ui-validation.mjs";
 import { buildReportData, ESTIMATE_NOTICES } from "./report-data.mjs";
 import { downloadCsv } from "./export-csv.mjs";
@@ -899,12 +900,16 @@ function CustomerScreen({ buildingType, region, floorArea, occupants, selection,
         </Banner>
       </Panel>
 
-      <div className="flex items-center justify-between">
-        <button onClick={onBack} className="text-xs px-3 py-2" style={{ border: `1px solid ${RULE}`, color: INK }}>← 原価・利益率設定に戻る</button>
-        <div className="flex items-center gap-2">
-          <button onClick={onDownloadCsv} disabled={!report} className="text-xs px-3 py-2" style={{ border: `1px solid ${RULE}`, color: INK }}>CSV出力</button>
-          <button onClick={onPrint} disabled={!report} className="text-xs px-3 py-2" style={{ background: INK, color: PAPER }}>PDFとして印刷</button>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <button onClick={onBack} className="text-xs px-3 py-2 text-center" style={{ border: `1px solid ${RULE}`, color: INK }}>← 原価・利益率設定に戻る</button>
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+          <button onClick={onDownloadCsv} disabled={!report} className="text-xs px-3 py-2 w-full sm:w-auto text-center" style={{ border: `1px solid ${RULE}`, color: INK }}>Excel / CSV出力</button>
+          <button onClick={onPrint} disabled={!report} className="text-xs px-3 py-2 w-full sm:w-auto text-center font-medium" style={{ background: INK, color: PAPER }}>帳票印刷 / PDF保存</button>
         </div>
+      </div>
+      <div className="text-xs text-right space-y-0.5" style={{ color: MUTED }}>
+        <p>※「Excel / CSV出力」はExcelでそのまま開けるBOM付きUTF-8 CSV形式で保存されます。</p>
+        <p>※「帳票印刷 / PDF保存」は印刷画面で送信先を「PDFに保存」に指定することでPDF保存できます。</p>
       </div>
     </div>
   );
@@ -1112,12 +1117,21 @@ export default function HVACCalculator() {
   const handleNewProject = () => {
     setProjectId(null); setProjectName("名称未設定の案件"); setScreen("calc"); setStorageMessage("新規案件を開始しました。入力値は必要に応じて更新してください。");
   };
+  const handleDeleteProject = () => {
+    if (!projectId) { setStorageMessage("削除する保存済み案件が選択されていません。"); return; }
+    try {
+      deleteProject(projectId);
+      refreshProjects();
+      handleNewProject();
+      setStorageMessage("案件を削除しました。");
+    } catch (error) { setStorageMessage(error.message); }
+  };
 
   const goto = (s) => setScreen(s);
 
   return (
     <div className="min-h-screen w-full" style={{ background: PAPER, color: INK }}>
-      <div className="max-w-5xl mx-auto px-6 py-10">
+      <div className="max-w-5xl mx-auto px-6 py-10 no-print">
         <div className="mb-2">
           <h1 className="text-2xl font-sans font-semibold tracking-tight" style={{ color: INK }}>
             概算空調負荷・概算見積ツール
@@ -1138,7 +1152,27 @@ export default function HVACCalculator() {
           <button onClick={handleSaveProject} className="text-xs px-3 py-2" style={{ background: INK, color: PAPER }}>保存</button>
           <button onClick={handleDuplicateProject} className="text-xs px-3 py-2" style={{ border: `1px solid ${RULE}`, color: INK }}>複製</button>
           <button onClick={handleNewProject} className="text-xs px-3 py-2" style={{ border: `1px solid ${RULE}`, color: INK }}>新規案件</button>
-          <div><div className="text-xs mb-1" style={{ color: MUTED }}>保存済み案件</div><select value="" onChange={(e) => applyProject(loadProject(e.target.value))} className="text-sm px-2 py-1" style={{ border: `1px solid ${RULE}` }}><option value="">選択して読込</option>{savedProjects.map((item) => <option key={item.projectId} value={item.projectId}>{item.projectName}（{new Date(item.updatedAt).toLocaleString("ja-JP")}）</option>)}</select></div>
+          {projectId && (
+            <button onClick={handleDeleteProject} className="text-xs px-3 py-2" style={{ border: `1px solid ${HEAT}`, color: HEAT }}>削除</button>
+          )}
+          <div>
+            <div className="text-xs mb-1" style={{ color: MUTED }}>保存済み案件一覧（履歴）</div>
+            <select
+              value={projectId || ""}
+              onChange={(e) => {
+                if (e.target.value) applyProject(loadProject(e.target.value));
+              }}
+              className="text-sm px-2 py-1"
+              style={{ border: `1px solid ${RULE}` }}
+            >
+              <option value="">案件一覧から読込 ({savedProjects.length}件)</option>
+              {savedProjects.map((item) => (
+                <option key={item.projectId} value={item.projectId}>
+                  {item.projectName}（{new Date(item.updatedAt).toLocaleString("ja-JP")}）
+                </option>
+              ))}
+            </select>
+          </div>
           {storageMessage && <span className="text-xs" style={{ color: MUTED }}>{storageMessage}</span>}
         </div>
 
@@ -1278,38 +1312,40 @@ export default function HVACCalculator() {
                     <p className="text-xs mb-4" style={{ color: MUTED }}>
                       必要能力 {result.requiredCapacityKW.toFixed(1)} kW({result.basis === "cooling" ? "冷房基準" : "暖房基準"})を満たす標準機種の組み合わせ例
                     </p>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr style={{ borderBottom: `1px solid ${RULE}` }}>
-                          <th className="text-left font-normal py-2" style={{ color: MUTED }}>機種容量</th>
-                          <th className="text-right font-normal py-2" style={{ color: MUTED }}>台数</th>
-                          <th className="text-right font-normal py-2" style={{ color: MUTED }}>1台あたり(参考)</th>
-                          <th className="text-right font-normal py-2" style={{ color: MUTED }}>設置合計容量</th>
-                          <th className="text-right font-normal py-2" style={{ color: MUTED }}>余裕率</th>
-                          <th className="text-left font-normal py-2" style={{ color: MUTED }}>実データ</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {result.equipmentOptions.map((opt) => {
-                          const isRecommended = opt.size === result.recommended.size;
-                          return (
-                            <tr key={opt.size} style={{ borderBottom: `1px solid ${RULE}`, background: isRecommended ? PAPER : "transparent" }}>
-                              <td className="py-2 font-mono">
-                                {opt.size.toFixed(1)} kW
-                                {isRecommended && <span className="ml-2 text-xs" style={{ color: COOL }}>推奨</span>}
-                              </td>
-                              <td className="py-2 text-right font-mono">{opt.count} 台</td>
-                              <td className="py-2 text-right font-mono text-xs" style={{ color: MUTED }}>{opt.perFloor.toFixed(1)} 台/階</td>
-                              <td className="py-2 text-right font-mono">{opt.installedKW.toFixed(1)} kW</td>
-                              <td className="py-2 text-right font-mono text-xs" style={{ color: MUTED }}>+{opt.surplusPct.toFixed(1)}%</td>
-                              <td className="py-2 text-xs">
-                                <DataTag kind={opt.selectionType === "formal" ? "real" : "check"} />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm min-w-[540px]">
+                        <thead>
+                          <tr style={{ borderBottom: `1px solid ${RULE}` }}>
+                            <th className="text-left font-normal py-2" style={{ color: MUTED }}>機種容量</th>
+                            <th className="text-right font-normal py-2" style={{ color: MUTED }}>台数</th>
+                            <th className="text-right font-normal py-2" style={{ color: MUTED }}>1台あたり(参考)</th>
+                            <th className="text-right font-normal py-2" style={{ color: MUTED }}>設置合計容量</th>
+                            <th className="text-right font-normal py-2" style={{ color: MUTED }}>余裕率</th>
+                            <th className="text-left font-normal py-2" style={{ color: MUTED }}>実データ</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {result.equipmentOptions.map((opt) => {
+                            const isRecommended = opt.size === result.recommended.size;
+                            return (
+                              <tr key={opt.size} style={{ borderBottom: `1px solid ${RULE}`, background: isRecommended ? PAPER : "transparent" }}>
+                                <td className="py-2 font-mono">
+                                  {opt.size.toFixed(1)} kW
+                                  {isRecommended && <span className="ml-2 text-xs" style={{ color: COOL }}>推奨</span>}
+                                </td>
+                                <td className="py-2 text-right font-mono">{opt.count} 台</td>
+                                <td className="py-2 text-right font-mono text-xs" style={{ color: MUTED }}>{opt.perFloor.toFixed(1)} 台/階</td>
+                                <td className="py-2 text-right font-mono">{opt.installedKW.toFixed(1)} kW</td>
+                                <td className="py-2 text-right font-mono text-xs" style={{ color: MUTED }}>+{opt.surplusPct.toFixed(1)}%</td>
+                                <td className="py-2 text-xs">
+                                  <DataTag kind={opt.selectionType === "formal" ? "real" : "check"} />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                     <p className="text-xs mt-3" style={{ color: MUTED }}>
                       ※ 台数は必要能力を機種容量で除した切り上げ計算です。実際の機種選定はゾーニング・配管長・室外機設置スペース等を踏まえて行ってください。
                     </p>
@@ -1397,8 +1433,8 @@ export default function HVACCalculator() {
             onBack={() => goto("internal")}
           />
         )}
-        {report && <PrintReport report={report} />}
       </div>
+      {report && <PrintReport report={report} />}
     </div>
   );
 }

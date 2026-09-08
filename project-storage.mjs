@@ -74,3 +74,9 @@ export function duplicateProject(projectId, storage) {
     inputs: source.inputs,
   }), storage);
 }
+
+export function deleteProject(projectId, storage) {
+  const projects = readAll(storage).filter((item) => item.projectId !== projectId);
+  writeAll(projects, storage);
+  return true;
+}

@@ -17,11 +17,12 @@ export function buildCsv(report) {
 }
 
 export function downloadCsv(report, filename = "hvac-estimate.csv") {
+  const safeName = String(filename || "hvac-estimate.csv").replace(/[/\\?%*:|"<>]/g, "_");
   const blob = new Blob([buildCsv(report)], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = filename;
+  anchor.download = safeName;
   anchor.click();
   URL.revokeObjectURL(url);
 }
