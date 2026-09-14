@@ -7,6 +7,74 @@ export const ESTIMATE_NOTICES = [
   "正式な実施設計、発注、法規判定の代替ではありません。",
 ];
 
+/**
+ * 案件(Project/Floor/Room)モデル用のレポートデータ。
+ * 数値はすべて計算エンジンの結果(calc)由来で、ここでは整形しか行わない。
+ */
+export function buildProjectReport({ project, calc, buildingTypes, regions }) {
+  const region = regions.find((r) => r.id === project.regionId);
+  const usageIds = [...new Set(project.rooms.map((room) => room.usage || project.buildingTypeId))];
+  const totals = calc.totals;
+  const recommended = calc.buildingSelection.status === "ok" ? calc.buildingSelection.recommended : null;
+  const kw = (v) => `${v.toFixed(1)} kW`;
+
+  return {
+    title: "空調負荷計算・機器選定レポート",
+    generatedAt: new Date().toISOString(),
+    project: { name: project.projectName || "名称未設定の案件", id: project.projectId || null },
+    method: "室面積 × 用途別暫定W/m²原単位 × 地域係数 × 温度設定補正 × (1 + 計画上の余裕) を室ごとに算出し、建物全体で合算",
+    notices: ESTIMATE_NOTICES,
+    conditions: [
+      ["施主・顧客名", project.client || "―"],
+      ["現場所在地", project.siteAddress || "―"],
+      ["地域区分", region ? region.label : "―"],
+      ["延床面積", project.totalFloorArea === null || project.totalFloorArea === undefined ? "―" : `${project.totalFloorArea} m²`],
+      ["階数", `${project.floors.length} 階`],
+      ["室数", `${project.rooms.length} 室（計算可能 ${totals.validRoomCount} 室）`],
+      ["室面積合計", `${totals.floorArea.toFixed(1)} m²`],
+      ["運転時間", `${project.operatingHours?.start || "―"} 〜 ${project.operatingHours?.end || "―"}`],
+      ["計画上の余裕", `${project.marginPct} %`],
+    ],
+    basis: [
+      ["地域補正", region ? `冷房 ×${region.coolingFactor} / 暖房 ×${region.heatingFactor}（provisional）` : "―"],
+      ...usageIds.map((id) => {
+        const type = buildingTypes.find((b) => b.id === id);
+        return [
+          `原単位（${type ? type.label : id}）`,
+          type ? `冷房 ${type.coolingWm2.value} W/m² / 暖房 ${type.heatingWm2.value} W/m²（provisional）` : "―",
+        ];
+      }),
+      ["人体発熱", `参考算出のみ（顕熱 ${totals.occupantSensibleKW.toFixed(2)} kW / 潜熱 ${totals.occupantLatentKW.toFixed(2)} kW、設計用負荷に未算入）`],
+      ["未実装項目", "外皮・窓・日射・照明・機器発熱・外気熱負荷・湿度・時刻別計算"],
+    ],
+    results: [
+      ["概算冷房負荷（合算）", kw(totals.roughLoadCoolingKW)],
+      ["概算暖房負荷（合算）", kw(totals.roughLoadHeatingKW)],
+      ["設計用必要冷房能力", kw(totals.designLoadCoolingKW)],
+      ["設計用必要暖房能力", kw(totals.designLoadHeatingKW)],
+      ["選定基準能力", `${kw(totals.requiredCapacityKW)}（${totals.basis === "cooling" ? "冷房" : "暖房"}が支配的）`],
+      ["必要換気量", `${Math.round(totals.ventilationM3h).toLocaleString()} m³/h`],
+    ],
+    rooms: calc.rooms.map(({ room, loadResult }) => [
+      room.name || "(室名未設定)",
+      loadResult.status === "ok"
+        ? `面積 ${loadResult.floorAreaTotal.toFixed(1)} m² / 冷房 ${kw(loadResult.designLoadCoolingKW)} / 暖房 ${kw(loadResult.designLoadHeatingKW)} / 換気 ${Math.round(loadResult.ventilationM3h).toLocaleString()} m³/h`
+        : loadResult.reason,
+    ]),
+    warnings: calc.warnings,
+    equipment: recommended
+      ? [
+          ["推奨容量クラス", `${recommended.size.toFixed(1)} kW（${recommended.code} / ${recommended.hp}馬力）× ${recommended.count}台`],
+          ["設置合計容量", kw(recommended.installedKW)],
+          ["余裕率", `+${recommended.surplusPct.toFixed(1)} %`],
+          ["選定区分", recommended.selectionType === "formal" ? "実在機器による正式選定" : "容量クラス仮選定（実在機器未確認）"],
+          ["選定理由", calc.buildingSelection.selectionReasonText],
+        ]
+      : [["機器選定", "計算可能な室がないため選定できません。"]],
+    pricing: [],
+  };
+}
+
 export function buildReportData({ project, input, result, selection, selectedQuote, costs, marginRate, buildingType, region, validation, capacityValidation }) {
   return {
     title: "概算空調負荷・概算見積ツール",

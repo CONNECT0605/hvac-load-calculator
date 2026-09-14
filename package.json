@@ -5,14 +5,14 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
-    "test": "node hvac-calc-engine.test.js",
+    "test": "node hvac-calc-engine.test.js && node export-csv.test.mjs && node project-storage.test.mjs && node ui-validation.test.mjs && node project-model.test.mjs && node weather.test.mjs",
     "check:sync": "node hvac-calc-engine.sync-check.js"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "vite": "latest"
+    "@vitejs/plugin-react": "5.2.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "vite": "7.3.6"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

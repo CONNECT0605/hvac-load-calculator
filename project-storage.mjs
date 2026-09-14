@@ -75,6 +75,42 @@ export function duplicateProject(projectId, storage) {
   }), storage);
 }
 
+export const EXPORT_FORMAT = "hvac-load-calculator.project";
+
+export function serializeProject(snapshot) {
+  return JSON.stringify({ format: EXPORT_FORMAT, schemaVersion: SCHEMA_VERSION, exportedAt: now(), project: snapshot }, null, 2);
+}
+
+export function parseProjectFile(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("JSONとして読み取れないファイルです。");
+  }
+  const project = parsed && parsed.project ? parsed.project : parsed;
+  if (!project || typeof project !== "object" || !project.inputs) {
+    throw new Error("案件データの形式が正しくありません。書き出ししたJSONファイルを選んでください。");
+  }
+  return project;
+}
+
+export function importProject(text, storage) {
+  const source = parseProjectFile(text);
+  return saveProject(createProjectSnapshot({ projectName: source.projectName, inputs: source.inputs }), storage);
+}
+
+export function downloadProjectJson(snapshot, filename) {
+  const safeName = String(filename || `${snapshot.projectName || "project"}.json`).replace(/[/\\?%*:|"<>]/g, "_");
+  const blob = new Blob([serializeProject(snapshot)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = safeName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 export function deleteProject(projectId, storage) {
   const projects = readAll(storage).filter((item) => item.projectId !== projectId);
   writeAll(projects, storage);

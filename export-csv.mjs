@@ -10,9 +10,10 @@ export function buildCsv(report) {
   for (const [key, value] of report.conditions) rows.push(["計算条件", key, value]);
   for (const [key, value] of report.basis) rows.push(["計算根拠", key, value]);
   for (const [key, value] of report.results) rows.push(["計算結果", key, value]);
+  for (const [key, value] of report.rooms || []) rows.push(["室別内訳", key, value]);
   for (const warning of report.warnings) rows.push(["警告", "", warning]);
   for (const [key, value] of report.equipment) rows.push(["機器選定", key, value]);
-  for (const [key, value] of report.pricing) rows.push(["価格・見積", key, value]);
+  for (const [key, value] of report.pricing || []) rows.push(["価格・見積", key, value]);
   return `\ufeff${rows.map((row) => row.map(escapeCsv).join(",")).join("\r\n")}\r\n`;
 }
 

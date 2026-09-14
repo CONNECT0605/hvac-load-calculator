@@ -1,8 +1,9 @@
 function Section({ title, rows }) {
+  if (!rows || rows.length === 0) return null;
   return (
     <section className="print-section">
       <h2>{title}</h2>
-      <table><tbody>{rows.map(([label, value]) => <tr key={label}><th>{label}</th><td>{value}</td></tr>)}</tbody></table>
+      <table><tbody>{rows.map(([label, value], index) => <tr key={`${label}-${index}`}><th>{label}</th><td>{value}</td></tr>)}</tbody></table>
     </section>
   );
 }
@@ -17,6 +18,7 @@ export default function PrintReport({ report }) {
       <Section title="計算条件" rows={report.conditions} />
       <Section title="計算根拠" rows={report.basis} />
       <Section title="計算結果" rows={report.results} />
+      <Section title="室別内訳" rows={report.rooms} />
       <Section title="警告・要確認" rows={report.warnings.length ? report.warnings.map((warning, index) => [`警告 ${index + 1}`, warning]) : [["状態", "警告なし"]]} />
       <Section title="機器選定" rows={report.equipment} />
       <Section title="価格・工事費・概算見積" rows={report.pricing} />
