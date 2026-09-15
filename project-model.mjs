@@ -83,6 +83,15 @@ export function createFloor(f = {}) {
   };
 }
 
+// 入れ子オブジェクトの正規化は「値の補完」ではなく「UIが参照するキーの存在保証」として行う。
+// 旧スキーマの書き出しJSONのように親キーはあるが入れ子キーが欠けている入力を読むと、
+// step-screens.jsx のプロパティ参照がundefinedになり画面全体が落ちるため、
+// createRoom の既定値と同じ構造をここでも必ず成立させる(数値そのものは補完しない)。
+function subObject(value, defaults) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return { ...defaults, ...source };
+}
+
 export function createRoom(r = {}) {
   return {
     roomId: r.roomId ?? makeId("room"),
@@ -91,28 +100,31 @@ export function createRoom(r = {}) {
     usage: r.usage ?? null, // BUILDING_TYPES の id
     floorArea: r.floorArea ?? null,
     ceilingHeight: r.ceilingHeight ?? DEFAULT_CEILING_HEIGHT,
-    indoorTemperature: r.indoorTemperature ?? { cooling: DEFAULT_COOLING_TEMP, heating: DEFAULT_HEATING_TEMP },
-    indoorHumidity: r.indoorHumidity ?? { cooling: null, heating: null }, // 現行エンジンは湿度未対応
-    operatingHours: r.operatingHours ?? { start: null, end: null },
+    indoorTemperature: subObject(r.indoorTemperature, { cooling: DEFAULT_COOLING_TEMP, heating: DEFAULT_HEATING_TEMP }),
+    indoorHumidity: subObject(r.indoorHumidity, { cooling: null, heating: null }), // 現行エンジンは湿度未対応
+    operatingHours: subObject(r.operatingHours, { start: null, end: null }),
     occupancy: r.occupancy ?? null,
-    internalHeat: r.internalHeat ?? {
+    internalHeat: subObject(r.internalHeat, {
       lightingWm2: null,   // 根拠となる原単位が未確認のため既定null
       equipmentWm2: null,  // 同上
       others: [],
+    }),
+    // null = 既存エンジンの「在室人数 × 用途別原単位」で自動算出
+    outdoorAir: {
+      ...subObject(r.outdoorAir, { volumeM3h: null, ventilationType: null }),
+      heatRecovery: subObject(r.outdoorAir?.heatRecovery, { enabled: false, efficiency: null }),
+      infiltration: subObject(r.outdoorAir?.infiltration, { sashTightness: null, hasExternalDoor: null }),
     },
-    outdoorAir: r.outdoorAir ?? {
-      volumeM3h: null,     // null = 既存エンジンの「在室人数 × 用途別原単位」で自動算出
-      ventilationType: null,
-      heatRecovery: { enabled: false, efficiency: null },
-      infiltration: { sashTightness: null, hasExternalDoor: null },
+    envelope: {
+      ...subObject(r.envelope, { walls: [], ceiling: { area: null, uValue: null } }),
+      // [{ area, orientation, uValue }]
+      walls: Array.isArray(r.envelope?.walls) ? r.envelope.walls.map((w) => createWall(w)) : [],
+      roof: subObject(r.envelope?.roof, { area: null, uValue: null }),
+      floor: subObject(r.envelope?.floor, { area: null, uValue: null }),
+      ceiling: subObject(r.envelope?.ceiling, { area: null, uValue: null }),
     },
-    envelope: r.envelope ?? {
-      walls: [],           // [{ area, orientation, uValue }]
-      roof: { area: null, uValue: null },
-      floor: { area: null, uValue: null },
-      ceiling: { area: null, uValue: null },
-    },
-    windows: r.windows ?? [], // [{ area, orientation, glassType, uValue, scValue, shading }]
+    // [{ area, orientation, glassType, uValue, scValue, shading }]
+    windows: Array.isArray(r.windows) ? r.windows.map((w) => createWindow(w)) : [],
   };
 }
 
@@ -132,7 +144,7 @@ export function createWindow(w = {}) {
 }
 
 export function createProjectDoc(p = {}) {
-  const floors = p.floors ?? [createFloor({ name: "1F", level: 1 })];
+  const floors = Array.isArray(p.floors) && p.floors.length ? p.floors.map((f) => createFloor(f)) : [createFloor({ name: "1F", level: 1 })];
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
     projectId: p.projectId ?? null,
@@ -143,11 +155,11 @@ export function createProjectDoc(p = {}) {
     regionId: p.regionId ?? "kanto",
     totalFloorArea: p.totalFloorArea ?? null,
     airConditionedArea: p.airConditionedArea ?? null,
-    operatingHours: p.operatingHours ?? { start: "09:00", end: "18:00" },
+    operatingHours: subObject(p.operatingHours, { start: "09:00", end: "18:00" }),
     marginPct: p.marginPct ?? 0,
     targetFloorId: p.targetFloorId ?? null,
     floors,
-    rooms: p.rooms ?? [],
+    rooms: Array.isArray(p.rooms) ? p.rooms.map((r) => createRoom(r)) : [],
     note: p.note ?? "",
   };
 }
@@ -156,7 +168,23 @@ export function createProjectDoc(p = {}) {
  * 保存済みデータ(旧スキーマを含む)を現行スキーマに正規化する。
  * 欠けているフィールドは既定値で補うが、数値は補完しない。
  */
-export function normalizeProjectDoc(raw) {
+const idsOf = (list) => (Array.isArray(list) ? list.map((entry) => entry.id) : []);
+const isKnownId = (ids, id) => ids.length === 0 || ids.includes(id);
+
+// 未知の用途/地域IDは、室用途(room.usage)だけでなく建物既定(buildingTypeId)からも
+// 参照されるため、既知のIDに戻す。既知IDの一覧は計算エンジンが持つ唯一の定義
+// (SHARED-LOGICのBUILDING_TYPES/REGIONS)から渡してもらい、ここでは複製しない。
+function resolveKnownIds(base, known) {
+  const buildingTypeIds = idsOf(known.buildingTypes);
+  const regionIds = idsOf(known.regions);
+  if (!isKnownId(buildingTypeIds, base.buildingTypeId)) base.buildingTypeId = buildingTypeIds[0];
+  if (!isKnownId(regionIds, base.regionId)) base.regionId = regionIds[0];
+  for (const room of base.rooms) {
+    if (room.usage !== null && !isKnownId(buildingTypeIds, room.usage)) room.usage = null;
+  }
+}
+
+export function normalizeProjectDoc(raw, known = {}) {
   if (!raw || typeof raw !== "object") return createProjectDoc();
   const base = createProjectDoc({
     projectId: raw.projectId ?? null,
@@ -181,6 +209,7 @@ export function normalizeProjectDoc(raw) {
         return room;
       })
     : [];
+  resolveKnownIds(base, known);
   return base;
 }
 

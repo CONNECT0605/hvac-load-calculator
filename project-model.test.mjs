@@ -5,6 +5,7 @@ import {
   createFloor,
   createProjectDoc,
   createRoom,
+  DEFAULT_HEATING_TEMP,
   getStepStatus,
   normalizeProjectDoc,
   roomAreaTotal,
@@ -96,6 +97,67 @@ assert.equal(normalized.totalFloorArea, 200);
 assert.equal(normalized.rooms.length, 1);
 assert.equal(normalized.rooms[0].floorId, normalized.floors[0].floorId);
 assert.equal(normalizeProjectDoc(null).rooms.length, 0);
+
+// 8b. 入れ子キーが欠けたデータでも、UIが参照するプロパティは必ず存在する。
+//     親オブジェクトだけがある旧書き出しJSONを読むと、従来はundefined(reading 'enabled')で
+//     画面全体が白画面になっていた。数値は補完せず、キーの存在のみを保証する。
+const partial = normalizeProjectDoc({
+  projectName: "旧書き出し", totalFloorArea: 200,
+  floors: [{ floorId: "f1", name: "1F", level: 1 }],
+  rooms: [{
+    roomId: "r1", floorId: "f1", name: "会議室", floorArea: 80, occupancy: 20,
+    indoorTemperature: { cooling: 26 }, indoorHumidity: null, operatingHours: null,
+    internalHeat: {}, outdoorAir: { volumeM3h: 600, ventilationType: "type1" },
+    envelope: { walls: [], roof: { area: null, uValue: null } }, windows: null,
+  }],
+});
+const partialRoom = partial.rooms[0];
+assert.equal(partialRoom.outdoorAir.heatRecovery.enabled, false);
+assert.equal(partialRoom.outdoorAir.heatRecovery.efficiency, null);
+assert.equal(partialRoom.outdoorAir.infiltration.hasExternalDoor, null);
+assert.equal(partialRoom.indoorHumidity.cooling, null);
+assert.equal(partialRoom.operatingHours.start, null);
+assert.equal(partialRoom.indoorTemperature.heating, DEFAULT_HEATING_TEMP);
+assert.deepEqual(partialRoom.envelope.floor, { area: null, uValue: null });
+assert.deepEqual(partialRoom.envelope.ceiling, { area: null, uValue: null });
+assert.deepEqual(partialRoom.internalHeat, { lightingWm2: null, equipmentWm2: null, others: [] });
+assert.deepEqual(partialRoom.windows, []);
+// 入力済みの値は保ったまま
+assert.equal(partialRoom.indoorTemperature.cooling, 26);
+assert.equal(partialRoom.outdoorAir.volumeM3h, 600);
+// 既存エンジンの計算結果は旧データでも従来どおり(数値は補完していない)
+assert.equal(computeProject(partial, engine).rooms[0].loadResult.status, "ok");
+assert.equal(computeProject(partial, engine).totals.designLoadCoolingKW.toFixed(1), "13.8");
+// 壊れた型(配列のはずが文字列/null)でも配列として扱う
+const brokenTypes = normalizeProjectDoc({ floors: "1F", rooms: "none", operatingHours: "09:00" });
+assert.equal(brokenTypes.floors.length, 1);
+assert.deepEqual(brokenTypes.rooms, []);
+assert.equal(brokenTypes.operatingHours.start, "09:00");
+assert.equal(createProjectDoc({ rooms: "none" }).rooms.length, 0);
+assert.equal(createProjectDoc({ operatingHours: null }).operatingHours.end, "18:00");
+
+// 8c. 未知の用途/地域IDは既知のIDに置き換える(UI・エンジン双方が参照するため)
+const known = { buildingTypes: engine.BUILDING_TYPES, regions: engine.REGIONS };
+const badIds = normalizeProjectDoc(
+  { buildingTypeId: "warehouse", regionId: "mars", totalFloorArea: 100,
+    rooms: [{ name: "室A", usage: "unknown_usage", floorArea: 50, occupancy: 5 }] },
+  known
+);
+assert.equal(badIds.buildingTypeId, engine.BUILDING_TYPES[0].id);
+assert.equal(badIds.regionId, engine.REGIONS[0].id);
+assert.equal(badIds.rooms[0].usage, null);
+// 未知IDのままだとエンジンが例外を投げるケースでも、正規化後は計算できる
+assert.equal(computeProject(badIds, engine).rooms[0].loadResult.status, "ok");
+// 既知IDは変更しない
+const goodIds = normalizeProjectDoc({ buildingTypeId: "restaurant", regionId: "okinawa",
+  rooms: [{ name: "室A", usage: "hotel", floorArea: 50, occupancy: 5 }] }, known);
+assert.equal(goodIds.buildingTypeId, "restaurant");
+assert.equal(goodIds.regionId, "okinawa");
+assert.equal(goodIds.rooms[0].usage, "hotel");
+// known を渡さない場合はIDを変更しない(既存呼び出しの互換)
+const noKnown = normalizeProjectDoc({ buildingTypeId: "warehouse", regionId: "mars" });
+assert.equal(noKnown.buildingTypeId, "warehouse");
+assert.equal(noKnown.regionId, "mars");
 
 // 9. 未指定温度は undefined として渡し、既存エンジンの既定値にそのまま委ねる
 const noTemp = createRoom({ floorId: floor.floorId, name: "温度未指定", usage: "office", floorArea: 40, occupancy: 4, indoorTemperature: { cooling: null, heating: null } });

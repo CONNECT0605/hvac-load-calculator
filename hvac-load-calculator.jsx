@@ -447,11 +447,21 @@ export default function HVACCalculator() {
       notify("案件を読み込めませんでした。", "danger");
       return;
     }
-    const doc = normalizeProjectDoc(snapshot.inputs);
+    const doc = normalizeProjectDoc(snapshot.inputs, { buildingTypes: BUILDING_TYPES, regions: REGIONS });
     setProject({ ...doc, projectId: snapshot.projectId, projectName: snapshot.projectName || doc.projectName });
     setStep("building");
     setScreen("workspace");
-    notify(`案件「${snapshot.projectName}」を開きました。`);
+    const rawType = snapshot.inputs?.buildingTypeId;
+    const rawRegion = snapshot.inputs?.regionId;
+    const adjusted =
+      (rawType !== undefined && rawType !== null && doc.buildingTypeId !== rawType) ||
+      (rawRegion !== undefined && rawRegion !== null && doc.regionId !== rawRegion);
+    notify(
+      adjusted
+        ? `案件「${snapshot.projectName}」を開きました。保存データに現行の用途・地域区分に無い指定があったため、既定値に置き換えました(要確認)。`
+        : `案件「${snapshot.projectName}」を開きました。`,
+      adjusted ? "warn" : "info"
+    );
   }
 
   function handleDuplicate(projectId) {
