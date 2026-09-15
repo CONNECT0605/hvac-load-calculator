@@ -518,14 +518,16 @@ function ResultStep({ project, calc, engine, onOpenReport }) {
         </Table>
       </Panel>
 
-      <Panel title="機器選定(建物全体)" subtitle="必要能力に対する容量クラス候補です。">
+      <Panel title="機器選定(建物全体)" subtitle="必要能力に対する容量クラス候補です。台/階は階数で均等配分した場合の1階あたり台数の目安です。">
         {selection.status === "ok" ? (
           <>
             <div className="mb-3 text-[12px] leading-relaxed" style={{ color: T.gray }}>{selection.selectionReasonText}</div>
             <Table
+              minWidth={620}
               head={[
                 { label: "容量クラス" },
                 { label: "台数", align: "right" },
+                { label: "台/階", align: "right" },
                 { label: "設置合計 (kW)", align: "right" },
                 { label: "余裕率 (%)", align: "right" },
                 { label: "区分" },
@@ -535,6 +537,7 @@ function ResultStep({ project, calc, engine, onOpenReport }) {
                 <tr key={c.size} style={c.size === selection.recommended.size ? { background: T.blueSoft } : undefined}>
                   <Td>{c.size.toFixed(1)} kW（{c.code} / {c.hp}馬力）{c.size === selection.recommended.size && <span className="ml-2"><Tag tone="navy">推奨</Tag></span>}</Td>
                   <Td align="right" mono>{c.count}</Td>
+                  <Td align="right" mono>{c.perFloor.toFixed(1)}</Td>
                   <Td align="right" mono>{c.installedKW.toFixed(1)}</Td>
                   <Td align="right" mono>+{c.surplusPct.toFixed(1)}</Td>
                   <Td>{c.selectionType === "formal" ? <Tag tone="ok">実在機器あり</Tag> : <Tag tone="muted">容量クラス仮選定</Tag>}</Td>

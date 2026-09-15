@@ -60,13 +60,46 @@ export function AppHeader({ projectName, screen, onNavigate, onSave, saveDisable
 }
 
 export function StepNav({ current, stepStatus, onSelect }) {
+  // モバイル/タブレットでは10ステップの一覧が入力欄より上に全展開され、
+  // 入力開始までスクロールが必要になるため、既定では折りたたみ現在ステップのみ表示する。
+  // PC(lg以上)では従来どおり常時全表示。
+  const [open, setOpen] = useState(false);
+  const currentStep = STEPS.find((s) => s.id === current);
+  const doneCount = STEPS.filter((s) => stepStatus[s.id]?.done).length;
+
+  const handleSelect = (stepId) => {
+    onSelect(stepId);
+    setOpen(false);
+  };
+
   return (
     <nav className="bg-white" style={{ border: `1px solid ${T.line}` }}>
       <div className="px-4 py-3" style={{ borderBottom: `1px solid ${T.lineSoft}` }}>
-        <div className="text-[12px] font-semibold" style={{ color: T.navy }}>入力ステップ</div>
-        <div className="text-[11px]" style={{ color: T.gray }}>全10ステップ</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold" style={{ color: T.navy }}>入力ステップ</div>
+            <div className="text-[11px]" style={{ color: T.gray }}>
+              {doneCount} / {STEPS.length} 完了
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="lg:hidden shrink-0 px-3 py-1.5 text-[12px]"
+            style={{ border: `1px solid ${T.line}`, color: T.navy, background: "#FFFFFF" }}
+            aria-expanded={open}
+          >
+            {open ? "一覧を閉じる" : "ステップ一覧"}
+          </button>
+        </div>
+        {!open && (
+          <div className="lg:hidden mt-2 text-[12px]" style={{ color: T.ink }}>
+            <span className="font-mono mr-1.5" style={{ color: T.navy }}>{currentStep?.no}.</span>
+            {currentStep?.label}
+          </div>
+        )}
       </div>
-      <ol>
+      <ol className={open ? "block" : "hidden lg:block"}>
         {STEPS.map((step) => {
           const status = stepStatus[step.id] || {};
           const active = current === step.id;
@@ -74,7 +107,7 @@ export function StepNav({ current, stepStatus, onSelect }) {
             <li key={step.id}>
               <button
                 type="button"
-                onClick={() => onSelect(step.id)}
+                onClick={() => handleSelect(step.id)}
                 className="w-full text-left px-4 py-2.5 flex items-start gap-3"
                 style={{
                   background: active ? T.blueSoft : "transparent",
