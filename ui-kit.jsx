@@ -45,14 +45,16 @@ export function Panel({ title, subtitle, actions, children, tone = "default" }) 
 export function Field({ label, unit, hint, required, children }) {
   return (
     <div className="py-2.5" style={{ borderBottom: `1px solid ${T.lineSoft}` }}>
-      <div className="flex items-center justify-between gap-4">
+      {/* 幅が足りない端末(320px級)では入力欄を折り返す。PC幅では flex-wrap が
+          発動せず従来と同じ1行レイアウトになる。 */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
         <label className="text-[12px] flex items-center gap-1.5" style={{ color: T.ink }}>
           {label}
           {required && <span className="text-[10px] px-1" style={{ color: T.danger, border: `1px solid ${T.danger}` }}>必須</span>}
         </label>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1 justify-end">
           {children}
-          {unit && <span className="text-[11px] w-14 text-left" style={{ color: T.gray }}>{unit}</span>}
+          {unit && <span className="text-[11px] w-14 text-left shrink-0" style={{ color: T.gray }}>{unit}</span>}
         </div>
       </div>
       {hint && <p className="text-[11px] mt-1 leading-relaxed" style={{ color: T.grayLight }}>{hint}</p>}
