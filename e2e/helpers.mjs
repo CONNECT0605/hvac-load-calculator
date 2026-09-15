@@ -32,22 +32,47 @@ export async function gotoHome(page) {
 export async function newProject(page) {
   await gotoHome(page);
   await page.getByRole("button", { name: "新規案件", exact: true }).first().click();
-  await expect(page.getByText("入力ステップ")).toBeVisible();
+  await expect(page.getByTestId("step-editor")).toBeVisible();
 }
 
-// モバイル/タブレットではステップ一覧が折りたたまれているので開いてから選ぶ。
+// ?design=A|B|C を付けて特定デザインで開く(比較・回帰検証用)。
+export async function newProjectAs(page, design) {
+  await page.goto(`/?design=${design}`);
+  await expect(page.getByRole("button", { name: "新規案件", exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "新規案件", exact: true }).first().click();
+  await expect(page.getByTestId("step-editor")).toBeVisible();
+}
+
+export const STEP_IDS = {
+  building: "建物", floors: "階", rooms: "室", conditions: "室内条件", occupancy: "人員",
+  internal: "照明/機器", outdoorair: "外気/換気", envelope: "外皮/", calc: "計算", result: "結果",
+};
+
+// A/B/C いずれのデザインでも同じ手順でステップを開けるようにする。
+// 各デザインのナビは data-testid="step-nav-<id>" で同じ契約を満たす。
 export async function openStep(page, label) {
+  const id = Object.keys(STEP_IDS).find((k) => STEP_IDS[k] === label);
+  if (!id) throw new Error(`未知のステップ: ${label}`);
+
+  // Design C: 画面下バーの「全ステップ」を開く
+  const cToggle = page.getByRole("button", { name: "全ステップ" });
+  if ((await cToggle.count()) > 0 && (await cToggle.first().isVisible())) {
+    await cToggle.first().click();
+    await page.waitForTimeout(150);
+  }
+  // Design A(モバイル): 折りたたみナビを開く
   const toggle = page.getByRole("button", { name: "ステップ一覧" });
   if ((await toggle.count()) > 0 && (await toggle.first().isVisible())) {
     await toggle.first().click();
-    await page.waitForTimeout(120);
+    await page.waitForTimeout(150);
   }
-  await page.locator("main nav ol button").filter({ hasText: label }).first().click();
-  await page.waitForTimeout(200);
+  await page.getByTestId(`step-nav-${id}`).first().click();
+  await page.waitForTimeout(250);
 }
 
+// A/B/C いずれのレイアウトでも現在のステップ本体を指す。
 export function stepBody(page) {
-  return page.locator("main > div.grid > div").nth(0);
+  return page.getByTestId("step-editor");
 }
 
 export async function fillBuilding(page, { name, client, area } = {}) {

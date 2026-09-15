@@ -107,6 +107,7 @@ export function StepNav({ current, stepStatus, onSelect }) {
             <li key={step.id}>
               <button
                 type="button"
+                data-testid={`step-nav-${step.id}`}
                 onClick={() => handleSelect(step.id)}
                 className="w-full text-left px-4 py-2.5 flex items-start gap-3"
                 style={{

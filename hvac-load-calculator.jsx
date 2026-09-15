@@ -31,6 +31,19 @@ import {
 } from "./app-screens.jsx";
 import StepEditor from "./step-screens.jsx";
 import { Button, Note, T } from "./ui-kit.jsx";
+import {
+  DesignCBar,
+  DesignCHeader,
+  DesignCSubNote,
+  DesignBEditor,
+  DesignBHeader,
+  DesignBWorkspace,
+  FINAL_VARIANT,
+  ThemeProvider,
+  VariantSwitcher,
+  readVariantFromUrl,
+  useVariant,
+} from "./design-variants.jsx";
 import { buildProjectReport } from "./report-data.mjs";
 import { downloadCsv } from "./export-csv.mjs";
 import PrintReport from "./print-report.jsx";
@@ -342,6 +355,21 @@ function updateListItem(list, index, patch) {
 }
 
 export default function HVACCalculator() {
+  // デザイン比較用の状態。既定は最終採用デザイン(FINAL_VARIANT)。
+  // ?design=A|B|C を付けたときだけ切替UIを表示する(通常利用では出さない)。
+  const initial = useMemo(() => readVariantFromUrl(), []);
+  const [variant, setVariant] = useState(initial.variant);
+  const [compare, setCompare] = useState(initial.compare);
+  return (
+    <ThemeProvider variant={variant}>
+      <HVACCalculatorInner />
+      {compare && <VariantSwitcher variant={variant} onChange={setVariant} />}
+    </ThemeProvider>
+  );
+}
+
+function HVACCalculatorInner() {
+  const variant = useVariant();
   const [project, setProject] = useState(() => createProjectDoc());
   const [screen, setScreen] = useState("home");
   const [step, setStep] = useState("building");
@@ -552,13 +580,13 @@ export default function HVACCalculator() {
 
   return (
     <div className="min-h-screen" style={{ background: T.bg, color: T.ink, fontFamily: "'Hiragino Kaku Gothic ProN','Noto Sans JP','Yu Gothic',sans-serif" }}>
-      <AppHeader
-        projectName={project.projectName}
-        screen={screen}
-        onNavigate={handleNavigate}
-        onSave={handleSave}
-        saveDisabled={!project.projectName}
-      />
+      {variant === "B" ? (
+        <DesignBHeader projectName={project.projectName} screen={screen} onNavigate={handleNavigate} onSave={handleSave} saveDisabled={!project.projectName} />
+      ) : variant === "C" ? (
+        <DesignCHeader projectName={project.projectName} screen={screen} onNavigate={handleNavigate} onSave={handleSave} saveDisabled={!project.projectName} />
+      ) : (
+        <AppHeader projectName={project.projectName} screen={screen} onNavigate={handleNavigate} onSave={handleSave} saveDisabled={!project.projectName} />
+      )}
 
       <input ref={fileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={handleImportFile} />
 
@@ -595,10 +623,66 @@ export default function HVACCalculator() {
           />
         )}
 
-        {screen === "workspace" && (
+        {screen === "workspace" && variant === "C" && (
+          <div className="grid grid-cols-1 gap-5 items-start pb-24">
+            <div data-testid="step-editor">
+            <StepEditor
+              step={step}
+              project={project}
+              calc={calc}
+              stepStatus={stepStatus}
+              actions={actions}
+              engine={ENGINE}
+              onJump={setStep}
+              onGoResult={() => setStep("result")}
+              onOpenReport={() => handleNavigate("report")}
+            />
+            </div>
+            <DesignCSubNote regionId={project.regionId} />
+            <DesignCBar
+              project={project}
+              calc={calc}
+              step={step}
+              stepStatus={stepStatus}
+              onJump={setStep}
+              onGoResult={() => setStep("result")}
+              onOpenReport={() => handleNavigate("report")}
+            />
+          </div>
+        )}
+
+        {screen === "workspace" && variant === "B" && (
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-5 items-start">
+            <div className="flex flex-col">
+              <DesignBEditor
+                step={step}
+                project={project}
+                calc={calc}
+                stepStatus={stepStatus}
+                actions={actions}
+                engine={ENGINE}
+                onJump={setStep}
+                onGoResult={() => setStep("result")}
+                onOpenReport={() => handleNavigate("report")}
+              />
+            </div>
+            {/* 長い入力画面でも不足・計算値を常に見られるようにPCでは追従させる。
+                狭幅では通常配置(追従は解除)にし、入力エリアを狭めない。 */}
+            <div className="lg:sticky lg:top-4">
+              <DesignBWorkspace
+                project={project}
+                calc={calc}
+                stepStatus={stepStatus}
+                regionId={project.regionId}
+              />
+            </div>
+          </div>
+        )}
+
+        {screen === "workspace" && variant === "A" && (
           <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_300px] gap-5 items-start">
             <StepNav current={step} stepStatus={stepStatus} onSelect={setStep} />
-            <div className="min-w-0">
+            <div className="min-w-0" data-testid="step-editor">
               <StepEditor
                 step={step}
                 project={project}

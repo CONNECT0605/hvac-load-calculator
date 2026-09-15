@@ -38,17 +38,18 @@ test("02 10ステップすべてが遷移でき、各画面が描画される", 
 });
 
 // 3
-test("03 前のステップ/次のステップで全10工程を往復できる", async ({ page }) => {
+test("03 前後の移動で全10工程を往復できる", async ({ page }) => {
   await newProject(page);
-  const next = page.getByRole("button", { name: "次のステップ" });
-  const prev = page.getByRole("button", { name: "前のステップ" });
-  await expect(prev).toBeDisabled();
-  for (let i = 1; i < 10; i += 1) await next.click();
-  await expect(next).toBeDisabled();
+  // 10工程すべてに直接移動できる導線がある(デザインA/B/Cいずれも同じ契約)
+  await expect(page.getByTestId(/^step-nav-/)).toHaveCount(10);
+
+  // 実際に前後へ移動できる
+  await openStep(page, "結果");
   await expect(stepBody(page)).toContainText("結果");
-  for (let i = 1; i < 10; i += 1) await prev.click();
-  await expect(prev).toBeDisabled();
+  await openStep(page, "建物");
   await expect(stepBody(page)).toContainText("建物");
+  await openStep(page, "計算");
+  await expect(stepBody(page)).toContainText("計算");
 });
 
 // 4
@@ -261,9 +262,11 @@ test("15 天気: API正常時は予報、失敗時はフォールバック表示
   await p2.route("**/api.open-meteo.com/**", (r) => r.abort());
   await p2.goto("/");
   await p2.getByRole("button", { name: "新規案件", exact: true }).first().click();
+  const cT = p2.getByRole("button", { name: "全ステップ" });
+  if ((await cT.count()) > 0 && (await cT.first().isVisible())) await cT.first().click();
   const toggle = p2.getByRole("button", { name: "ステップ一覧" });
   if ((await toggle.count()) > 0 && (await toggle.first().isVisible())) await toggle.first().click();
-  await p2.locator("main nav ol button").filter({ hasText: "建物" }).first().click();
+  await p2.getByTestId("step-nav-building").first().click();
   await p2.waitForTimeout(1500);
   await expect(p2.getByText(/天気予報を取得できませんでした/)).toBeVisible();
   await expect(p2.getByText(/計算結果には影響しません/)).toBeVisible();

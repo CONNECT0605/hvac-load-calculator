@@ -2,7 +2,7 @@
 // 「レスポンシブCSSがあるからOK」ではなく、実際に各幅で10工程を描画し
 // 横スクロールの発生・タップ領域・入力欄の見切れを実測する。
 import { test, expect } from "@playwright/test";
-import { STEPS, buildProject, gotoHome, newProject, openStep, parseKws, runCalc, stepBody, stubWeather } from "./helpers.mjs";
+import { STEPS, buildProject, gotoHome, newProject, newProjectAs, openStep, parseKws, runCalc, stepBody, stubWeather } from "./helpers.mjs";
 
 const WIDTHS = [
   { name: "極小(320)", width: 320, height: 568 },
@@ -31,9 +31,9 @@ test.describe("レスポンシブ実表示", () => {
     });
   }
 
-  test("スマホ幅: ステップ一覧が折りたたまれ、現在ステップが表示される", async ({ page }) => {
+  test("Design A(スマホ幅): ステップ一覧が折りたたまれ、現在ステップが表示される", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await newProject(page);
+    await newProjectAs(page, "A");
     // 折りたたみ時は ol が非表示
     await expect(page.locator("main nav ol")).toBeHidden();
     await expect(page.locator("main nav")).toContainText(/\d+ \/ 10 完了/);
@@ -48,7 +48,7 @@ test.describe("レスポンシブ実表示", () => {
 
   test("スマホ幅: 主要ボタンのタップ領域が44px以上ある", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await newProject(page);
+    await newProjectAs(page, "A");
     const small = [];
     for (const name of ["次のステップ", "前のステップ", "ステップ一覧"]) {
       const box = await page.getByRole("button", { name }).first().boundingBox();
@@ -59,7 +59,7 @@ test.describe("レスポンシブ実表示", () => {
 
   test("スマホ幅: 入力欄が見切れない(画面内に収まる)", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await newProject(page);
+    await newProjectAs(page, "A");
     await openStep(page, "建物");
     const bad = await page.evaluate(() => {
       const vw = document.documentElement.clientWidth;
@@ -85,9 +85,9 @@ test.describe("レスポンシブ実表示", () => {
     expect(overflow).toBe(0);
   });
 
-  test("PC幅: 3カラム(ナビ/入力/ステータス)が同時表示される", async ({ page }) => {
+  test("Design A(PC幅): 3カラム(ナビ/入力/ステータス)が同時表示される", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await newProject(page);
+    await newProjectAs(page, "A");
     await expect(page.locator("main nav ol")).toBeVisible();
     await expect(page.locator("main")).toContainText("入力ステップ");
     const cols = await page.evaluate(() => {
