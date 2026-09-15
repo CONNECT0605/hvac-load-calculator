@@ -29,3 +29,17 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # E2E(実ブラウザ): 10工程・入力保持・計算・出力・レスポンシブを検証する。
+      # 別途インストールしたPlaywrightブラウザをキャッシュして実行する。
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npm run test:e2e
