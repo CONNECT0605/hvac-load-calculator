@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 計算エンジン(hvac-calc-engine.js)と埋め込みSHARED-LOGICの一致確認。
+      # 計算仕様の無断変更をここで機械的に検出する。
+      - name: Verify calculation logic sync
+        run: npm run check:sync
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
