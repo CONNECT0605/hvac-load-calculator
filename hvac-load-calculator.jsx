@@ -1,12 +1,15 @@
 import { useMemo, useRef, useState } from "react";
 import {
+  STORAGE_UNAVAILABLE_MESSAGE,
   createProjectSnapshot,
   deleteProject,
   downloadProjectJson,
   duplicateProject,
   importProject,
+  isStorageAvailable,
   listProjects,
   loadProject,
+  parseProjectFile,
   saveProject,
 } from "./project-storage.mjs";
 import {
@@ -344,6 +347,8 @@ export default function HVACCalculator() {
   const [step, setStep] = useState("building");
   const [savedProjects, setSavedProjects] = useState(() => listProjects());
   const [message, setMessage] = useState(null);
+  // localStorageが参照不可の環境(プライベートブラウズ等)でも計算・出力は使えるようにする。
+  const storageAvailable = useMemo(() => isStorageAvailable(), []);
   const fileInputRef = useRef(null);
 
   const calc = useMemo(() => computeProject(project, ENGINE), [project]);
@@ -357,7 +362,7 @@ export default function HVACCalculator() {
   );
 
   const notify = (text, tone = "info") => setMessage({ text, tone });
-  const refreshList = () => setSavedProjects(listProjects());
+  const refreshList = () => setSavedProjects(storageAvailable ? listProjects() : []);
 
   const actions = {
     setField: (key, value) => setProject((p) => ({ ...p, [key]: value })),
@@ -435,10 +440,18 @@ export default function HVACCalculator() {
   }
 
   function handleSave() {
-    const snapshot = saveProject(createProjectSnapshot({ projectId: project.projectId, projectName: project.projectName, inputs: project }));
-    setProject((p) => ({ ...p, projectId: snapshot.projectId }));
-    refreshList();
-    notify(`案件「${snapshot.projectName}」を保存しました。`, "ok");
+    if (!storageAvailable) {
+      notify(STORAGE_UNAVAILABLE_MESSAGE, "warn");
+      return;
+    }
+    try {
+      const snapshot = saveProject(createProjectSnapshot({ projectId: project.projectId, projectName: project.projectName, inputs: project }));
+      setProject((p) => ({ ...p, projectId: snapshot.projectId }));
+      refreshList();
+      notify(`案件「${snapshot.projectName}」を保存しました。`, "ok");
+    } catch (error) {
+      notify(`保存できませんでした: ${error.message}`, "danger");
+    }
   }
 
   // 保存データを開く処理を1箇所にまとめる。IDを置き換えた場合の要確認は prefix 付きの
@@ -471,16 +484,32 @@ export default function HVACCalculator() {
   }
 
   function handleDuplicate(projectId) {
-    const snapshot = duplicateProject(projectId);
-    refreshList();
-    if (snapshot) notify(`案件を複製しました(${snapshot.projectName})。`, "ok");
+    if (!storageAvailable) {
+      notify(STORAGE_UNAVAILABLE_MESSAGE, "warn");
+      return;
+    }
+    try {
+      const snapshot = duplicateProject(projectId);
+      refreshList();
+      if (snapshot) notify(`案件を複製しました(${snapshot.projectName})。`, "ok");
+    } catch (error) {
+      notify(`複製できませんでした: ${error.message}`, "danger");
+    }
   }
 
   function handleDelete(projectId) {
-    deleteProject(projectId);
-    refreshList();
-    setProject((p) => (p.projectId === projectId ? { ...p, projectId: null } : p));
-    notify("案件を削除しました。");
+    if (!storageAvailable) {
+      notify(STORAGE_UNAVAILABLE_MESSAGE, "warn");
+      return;
+    }
+    try {
+      deleteProject(projectId);
+      refreshList();
+      setProject((p) => (p.projectId === projectId ? { ...p, projectId: null } : p));
+      notify("案件を削除しました。");
+    } catch (error) {
+      notify(`削除できませんでした: ${error.message}`, "danger");
+    }
   }
 
   function handleExport(projectId) {
@@ -501,7 +530,14 @@ export default function HVACCalculator() {
     event.target.value = "";
     if (!file) return;
     try {
-      const snapshot = importProject(await file.text());
+      const text = await file.text();
+      // 保存不可の環境でも、読み込んだ案件で入力・計算・書き出しは続けられるようにする。
+      if (!storageAvailable) {
+        const parsed = parseProjectFile(text);
+        openProjectSnapshot(parsed, "案件を読み込みました(この環境では保存できません)");
+        return;
+      }
+      const snapshot = importProject(text);
       refreshList();
       openProjectSnapshot(snapshot, `案件「${snapshot.projectName}」をインポートしました`);
     } catch (error) {

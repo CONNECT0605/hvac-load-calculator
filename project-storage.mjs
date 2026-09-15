@@ -9,10 +9,29 @@ function now() {
   return new Date().toISOString();
 }
 
+// プライベートブラウズや企業ポリシー下では window.localStorage への参照自体が
+// 例外を投げるため、参照も含めて防御する(未防御だと初期描画ごと落ちて白画面になる)。
 function getStore(storage) {
   if (storage) return storage;
-  if (typeof window === "undefined" || !window.localStorage) return null;
-  return window.localStorage;
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+export function isStorageAvailable(storage) {
+  const store = getStore(storage);
+  if (!store) return false;
+  try {
+    const probeKey = `${STORAGE_KEY}.probe`;
+    store.setItem(probeKey, "1");
+    if (typeof store.removeItem === "function") store.removeItem(probeKey);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readAll(storage) {
@@ -29,7 +48,12 @@ function readAll(storage) {
 function writeAll(projects, storage) {
   const store = getStore(storage);
   if (!store) throw new Error("このブラウザではローカル保存を利用できません。");
-  store.setItem(STORAGE_KEY, JSON.stringify(projects));
+  try {
+    store.setItem(STORAGE_KEY, JSON.stringify(projects));
+  } catch {
+    // 容量超過・プライベートブラウズ等。生の例外をUIに出さず日本語で案内する。
+    throw new Error("このブラウザではローカル保存を利用できません。");
+  }
 }
 
 export function createProjectSnapshot({ projectId, projectName, createdAt, inputs }) {
@@ -116,3 +140,5 @@ export function deleteProject(projectId, storage) {
   writeAll(projects, storage);
   return true;
 }
+
+export const STORAGE_UNAVAILABLE_MESSAGE = "このブラウザではローカル保存を利用できません。案件一覧の保存・複製・削除は行えませんが、入力・計算・書き出しはそのまま利用できます。";

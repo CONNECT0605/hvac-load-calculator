@@ -1,6 +1,7 @@
 // ui-kit.jsx
 // Design A(白・ネイビー・ブルー・ブラック/グレー基調)の共通UIパーツ。
 // 表示専用。計算・業務ロジックは一切持たない。
+import { Component } from "react";
 
 export const T = {
   navy: "#0F2A47",
@@ -213,4 +214,45 @@ export function EmptyState({ message, action }) {
       {action && <div className="mt-3 flex justify-center">{action}</div>}
     </div>
   );
+}
+
+// 予期しない例外でReactツリー全体が消え「白画面」になるのを防ぐ最後の砦。
+// 計算結果は変更せず、表示のみを守る。保存済みデータには触れない。
+export class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("[HVAC] 予期しないエラーを検出しました", error, info);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="min-h-screen px-6 py-10" style={{ background: T.bg, color: T.ink }}>
+        <div className="max-w-[720px] mx-auto">
+          <h1 className="text-[18px] font-semibold mb-3">画面の表示中にエラーが発生しました</h1>
+          <p className="text-[13px] mb-4" style={{ color: T.gray }}>
+            入力内容や保存済みの案件データは失われていません。以下の内容を確認してください。
+          </p>
+          <pre
+            className="text-[12px] p-3 rounded overflow-auto mb-4"
+            style={{ background: T.lineSoft, color: T.ink, border: `1px solid ${T.line}` }}
+          >
+            {String(this.state.error?.message || this.state.error)}
+          </pre>
+          <div className="flex gap-2">
+            <Button variant="primary" onClick={() => window.location.reload()}>再読み込み</Button>
+            <Button onClick={() => this.setState({ error: null })}>表示を戻す</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 }
