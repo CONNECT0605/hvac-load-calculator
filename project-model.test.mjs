@@ -5,7 +5,9 @@ import {
   createFloor,
   createProjectDoc,
   createRoom,
+  DEFAULT_BUILDING_TYPE_ID,
   DEFAULT_HEATING_TEMP,
+  DEFAULT_REGION_ID,
   getStepStatus,
   normalizeProjectDoc,
   roomAreaTotal,
@@ -143,9 +145,12 @@ const badIds = normalizeProjectDoc(
     rooms: [{ name: "室A", usage: "unknown_usage", floorArea: 50, occupancy: 5 }] },
   known
 );
-assert.equal(badIds.buildingTypeId, engine.BUILDING_TYPES[0].id);
-assert.equal(badIds.regionId, engine.REGIONS[0].id);
+// 置き換え先は案件の既定ID(エンジン側の既定と同じ)。一覧の先頭を勝手に選ばない。
+assert.equal(badIds.buildingTypeId, "office");
+assert.equal(badIds.regionId, "kanto");
 assert.equal(badIds.rooms[0].usage, null);
+assert.ok(engine.BUILDING_TYPES.some((b) => b.id === badIds.buildingTypeId));
+assert.ok(engine.REGIONS.some((r) => r.id === badIds.regionId));
 // 未知IDのままだとエンジンが例外を投げるケースでも、正規化後は計算できる
 assert.equal(computeProject(badIds, engine).rooms[0].loadResult.status, "ok");
 // 既知IDは変更しない

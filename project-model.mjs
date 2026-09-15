@@ -21,6 +21,9 @@ export const DEFAULT_CEILING_HEIGHT = 2.6;
 // 室内設定温度の既定値は既存エンジン computeLoad() のフォールバック値(26℃/22℃)と同一。
 export const DEFAULT_COOLING_TEMP = 26;
 export const DEFAULT_HEATING_TEMP = 22;
+// 案件の既定用途・地域区分。既存エンジン側の既定と同じ値を使う(新しい既定値は作らない)。
+export const DEFAULT_BUILDING_TYPE_ID = "office";
+export const DEFAULT_REGION_ID = "kanto";
 
 export const ORIENTATIONS = [
   { id: "n", label: "北" },
@@ -151,8 +154,8 @@ export function createProjectDoc(p = {}) {
     projectName: p.projectName ?? "名称未設定の案件",
     client: p.client ?? "",
     siteAddress: p.siteAddress ?? "",
-    buildingTypeId: p.buildingTypeId ?? "office",
-    regionId: p.regionId ?? "kanto",
+    buildingTypeId: p.buildingTypeId ?? DEFAULT_BUILDING_TYPE_ID,
+    regionId: p.regionId ?? DEFAULT_REGION_ID,
     totalFloorArea: p.totalFloorArea ?? null,
     airConditionedArea: p.airConditionedArea ?? null,
     operatingHours: subObject(p.operatingHours, { start: "09:00", end: "18:00" }),
@@ -170,15 +173,19 @@ export function createProjectDoc(p = {}) {
  */
 const idsOf = (list) => (Array.isArray(list) ? list.map((entry) => entry.id) : []);
 const isKnownId = (ids, id) => ids.length === 0 || ids.includes(id);
+// 既定IDが一覧に無い場合のみ先頭に退避する(通常は既定IDが使われる)
+const fallbackId = (ids, preferred) => (ids.includes(preferred) ? preferred : ids[0]);
 
 // 未知の用途/地域IDは、室用途(room.usage)だけでなく建物既定(buildingTypeId)からも
-// 参照されるため、既知のIDに戻す。既知IDの一覧は計算エンジンが持つ唯一の定義
-// (SHARED-LOGICのBUILDING_TYPES/REGIONS)から渡してもらい、ここでは複製しない。
+// 参照されるため、既知のIDに戻す。置き換え先は案件の既定ID(エンジン側の既定と同じ)であり、
+// 一覧の先頭を勝手に選ぶと地域区分が実態と食い違うため使わない。
+// 既知IDの一覧は計算エンジンが持つ唯一の定義(SHARED-LOGICのBUILDING_TYPES/REGIONS)から
+// 渡してもらい、ここでは複製しない。
 function resolveKnownIds(base, known) {
   const buildingTypeIds = idsOf(known.buildingTypes);
   const regionIds = idsOf(known.regions);
-  if (!isKnownId(buildingTypeIds, base.buildingTypeId)) base.buildingTypeId = buildingTypeIds[0];
-  if (!isKnownId(regionIds, base.regionId)) base.regionId = regionIds[0];
+  if (!isKnownId(buildingTypeIds, base.buildingTypeId)) base.buildingTypeId = fallbackId(buildingTypeIds, DEFAULT_BUILDING_TYPE_ID);
+  if (!isKnownId(regionIds, base.regionId)) base.regionId = fallbackId(regionIds, DEFAULT_REGION_ID);
   for (const room of base.rooms) {
     if (room.usage !== null && !isKnownId(buildingTypeIds, room.usage)) room.usage = null;
   }

@@ -441,12 +441,9 @@ export default function HVACCalculator() {
     notify(`案件「${snapshot.projectName}」を保存しました。`, "ok");
   }
 
-  function handleOpenProject(projectId) {
-    const snapshot = loadProject(projectId);
-    if (!snapshot) {
-      notify("案件を読み込めませんでした。", "danger");
-      return;
-    }
+  // 保存データを開く処理を1箇所にまとめる。IDを置き換えた場合の要確認は prefix 付きの
+  // 同じ通知に含める(インポート時に「インポートしました」の通知で上書きされないようにするため)。
+  function openProjectSnapshot(snapshot, prefix) {
     const doc = normalizeProjectDoc(snapshot.inputs, { buildingTypes: BUILDING_TYPES, regions: REGIONS });
     setProject({ ...doc, projectId: snapshot.projectId, projectName: snapshot.projectName || doc.projectName });
     setStep("building");
@@ -458,10 +455,19 @@ export default function HVACCalculator() {
       (rawRegion !== undefined && rawRegion !== null && doc.regionId !== rawRegion);
     notify(
       adjusted
-        ? `案件「${snapshot.projectName}」を開きました。保存データに現行の用途・地域区分に無い指定があったため、既定値に置き換えました(要確認)。`
-        : `案件「${snapshot.projectName}」を開きました。`,
+        ? `${prefix}。保存データに現行の用途・地域区分に無い指定があったため、既定値に置き換えました(要確認)。`
+        : `${prefix}。`,
       adjusted ? "warn" : "info"
     );
+  }
+
+  function handleOpenProject(projectId) {
+    const snapshot = loadProject(projectId);
+    if (!snapshot) {
+      notify("案件を読み込めませんでした。", "danger");
+      return;
+    }
+    openProjectSnapshot(snapshot, `案件「${snapshot.projectName}」を開きました`);
   }
 
   function handleDuplicate(projectId) {
@@ -497,8 +503,7 @@ export default function HVACCalculator() {
     try {
       const snapshot = importProject(await file.text());
       refreshList();
-      handleOpenProject(snapshot.projectId);
-      notify(`案件「${snapshot.projectName}」をインポートしました。`, "ok");
+      openProjectSnapshot(snapshot, `案件「${snapshot.projectName}」をインポートしました`);
     } catch (error) {
       notify(error.message, "danger");
     }
