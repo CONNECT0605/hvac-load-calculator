@@ -131,6 +131,31 @@ check(rDefault.coefficientSources.internalLoad.name.includes("建築設備設計
 check(e.R6_INTERNAL_LOAD.occupantSensibleWPerPerson === 69 && e.R6_INTERNAL_LOAD.occupantLatentWPerPerson === 53, "人体発熱は基準値(顕熱69W/潜熱53W)を採用");
 check(e.R6_INTERNAL_LOAD.ventilationM3hPerPerson === 30, "外気量は基準値30m³/(h・人)を採用");
 
+// 12. 材料構成 → U値 → 負荷(§6「材料変更 → U値/負荷が変化」)
+const rMat = run({ walls: [{ area: 200, materials: [{ thicknessMm: 100, conductivityWmK: 0.15 }] }] });
+const rMat2 = run({ walls: [{ area: 200, materials: [{ thicknessMm: 100, conductivityWmK: 1.60 }] }] });
+check(!close(rMat.peak.coolingKW, r0.peak.coolingKW), "壁を材料構成(厚さ・熱伝導率)で指定するとU値が算定され負荷が変化する");
+check(rMat.peak.coolingKW < rMat2.peak.coolingKW, "熱伝導率が小さい(断熱性能が高い)材料ほど負荷が小さい");
+check(Math.abs(e.uValueFromMaterials([{ thicknessMm: 100, conductivityWmK: 1.6 }]) - (1 / (0.15 + 0.1 / 1.6))) < 1e-9, "U値=1/(Ri+Σt/λ+Ro) の定義式どおり");
+check(e.uValueFromMaterials([]) === null && e.uValueFromMaterials(null) === null, "材料未指定ならU値はnull(0扱いしない)");
+
+// 13. 室温・湿度の変更(§6)
+check(run({ coolingSetTemp: 24 }).peak.coolingKW > r0.peak.coolingKW, "冷房設定温度を下げると負荷が増える");
+check(run({ coolingSetTemp: 28 }).peak.coolingKW < r0.peak.coolingKW, "冷房設定温度を上げると負荷が減る");
+check(peakOf(run({ indoorRHCooling: 70 })).coolingLatentKW < pk.coolingLatentKW, "室内湿度を上げると潜熱が減る");
+
+// 14. その他内部発熱(データモデル接続の確認)
+const rOthers = run({ others: [{ name: "厨房機器", sensibleKW: 5, latentKW: 2 }] });
+check(Array.isArray(rOthers.notVerified) && !rOthers.notVerified.some((x) => x.includes("その他")), "その他内部発熱は未確認事項として扱われる(値の発明をしない)");
+
+// 15. 暖房の内訳と負荷項目リスト
+check(rHeat.heatingBreakdown !== null && Object.keys(rHeat.heatingBreakdown).length === 5, "暖房の内訳5項目が算出される(構造体・ガラス面・すきま風・外気)");
+check(close(Object.values(rHeat.heatingBreakdown).reduce((a, b) => a + b, 0), rHeat.peak.heatingKW, 1e-9), "暖房内訳の合計=暖房ピーク負荷");
+check(r0.loadItems.cooling.length === 8 && r0.loadItems.heating.length === 5, "公的基準の負荷項目数(冷房8・暖房5)を結果に保持");
+check(r0.loadItems.source.url.includes("mlit.go.jp"), "負荷項目の出典が国交省公式PDFを指す");
+const notImpl = r0.loadItems.cooling.filter((i) => i.implemented !== true);
+check(notImpl.length === 2 && notImpl.every((i) => i.no === 5 || i.no === 8), "未実装項目(その他室内負荷の潜熱・ダクト等)を明示的に記録");
+
 console.log(`\n=== STABRO因果テスト 結果: ${pass}件成功 / ${fail}件失敗 ===`);
 if (fail === 0) console.log("入力→計算結果の接続を確認しました。");
 process.exit(fail === 0 ? 0 : 1);

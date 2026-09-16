@@ -99,6 +99,8 @@ export function createRoom(r = {}) {
   return {
     roomId: r.roomId ?? makeId("room"),
     floorId: r.floorId ?? null,
+    // 系統(空調系統)。STABROの系統集計に対応する。
+    systemId: r.systemId ?? null,
     name: r.name ?? "室",
     usage: r.usage ?? null, // BUILDING_TYPES の id
     floorArea: r.floorArea ?? null,
@@ -122,6 +124,9 @@ export function createRoom(r = {}) {
       ...subObject(r.envelope, { walls: [], ceiling: { area: null, uValue: null } }),
       // [{ area, orientation, uValue }]
       walls: Array.isArray(r.envelope?.walls) ? r.envelope.walls.map((w) => createWall(w)) : [],
+      // 内壁(間仕切り): [{ area, uValue }]。R6の「構造体負荷」の内壁分。
+      interiorWalls: Array.isArray(r.envelope?.interiorWalls) ? r.envelope.interiorWalls.map((w) => createWall(w)) : [],
+      interiorDeltaTK: r.envelope?.interiorDeltaTK ?? null,
       roof: subObject(r.envelope?.roof, { area: null, uValue: null }),
       floor: subObject(r.envelope?.floor, { area: null, uValue: null }),
       ceiling: subObject(r.envelope?.ceiling, { area: null, uValue: null }),
@@ -394,4 +399,123 @@ export function projectSummaryRows(project, calc) {
     ["設計用必要冷房能力", calc ? `${calc.totals.designLoadCoolingKW.toFixed(1)} kW` : "―"],
     ["設計用必要暖房能力", calc ? `${calc.totals.designLoadHeatingKW.toFixed(1)} kW` : "―"],
   ];
+}
+
+// ============================================================================
+// 【系統集計】Room → System → Floor → Building
+// STABROの集計単位(室・系統・階・建物)に対応する。
+// 計算式は一切持たず、computeProject() の室別結果を合算するだけ(新しい式なし)。
+// ============================================================================
+
+/** 室別結果の1件から集計対象の負荷値を取り出す(status!=="ok"は0扱いせず除外)。 */
+function aggregationValues(roomEntry) {
+  const l = roomEntry.loadResult;
+  if (!l || l.status !== "ok") return null;
+  return {
+    floorArea: l.floorAreaTotal || 0,
+    coolingKW: l.designLoadCoolingKW || 0,
+    heatingKW: l.designLoadHeatingKW || 0,
+    requiredKW: l.requiredCapacityKW || 0,
+    ventilationM3h: l.ventilationM3h || 0,
+    occupantSensibleKW: l.occupantSensibleKW || 0,
+    occupantLatentKW: l.occupantLatentKW || 0,
+  };
+}
+
+function emptyAggregate(label) {
+  return {
+    label,
+    roomCount: 0,
+    validRoomCount: 0,
+    floorArea: 0,
+    designLoadCoolingKW: 0,
+    designLoadHeatingKW: 0,
+    requiredCapacityKW: 0,
+    ventilationM3h: 0,
+    occupantSensibleKW: 0,
+    occupantLatentKW: 0,
+    basis: null,
+  };
+}
+
+function accumulate(agg, v) {
+  agg.validRoomCount += 1;
+  agg.floorArea += v.floorArea;
+  agg.designLoadCoolingKW += v.coolingKW;
+  agg.designLoadHeatingKW += v.heatingKW;
+  agg.requiredCapacityKW += v.requiredKW;
+  agg.ventilationM3h += v.ventilationM3h;
+  agg.occupantSensibleKW += v.occupantSensibleKW;
+  agg.occupantLatentKW += v.occupantLatentKW;
+  return agg;
+}
+
+function finalizeAggregate(agg) {
+  agg.basis = agg.designLoadCoolingKW >= agg.designLoadHeatingKW ? "cooling" : "heating";
+  return agg;
+}
+
+/**
+ * 室別結果を「室 → 系統 → 階 → 建物」で集計する。
+ * 系統は Room.systemId、階は Room.floorId による。未設定は「未設定」として集約する。
+ */
+export function aggregateProject(project, calc) {
+  const byRoom = [];
+  const bySystemMap = new Map();
+  const byFloorMap = new Map();
+
+  for (const entry of calc.rooms) {
+    const v = aggregationValues(entry);
+    const room = entry.room;
+    const floorId = room.floorId || "__none__";
+    const systemId = room.systemId || "__none__";
+    const floor = project.floors.find((f) => f.floorId === floorId);
+    const floorLabel = floor ? floor.name : "階未設定";
+    const systemLabel = systemId === "__none__" ? "系統未設定" : systemId;
+
+    byRoom.push({
+      roomId: room.roomId,
+      roomName: room.name || "(室名未設定)",
+      floorId: room.floorId,
+      floorLabel,
+      systemId: room.systemId,
+      systemLabel,
+      usage: room.usage || project.buildingTypeId,
+      status: entry.loadResult?.status || "invalid",
+      ...(v || { floorArea: 0, coolingKW: 0, heatingKW: 0, requiredKW: 0, ventilationM3h: 0, occupantSensibleKW: 0, occupantLatentKW: 0 }),
+    });
+
+    if (!v) continue;
+    if (!bySystemMap.has(systemId)) bySystemMap.set(systemId, emptyAggregate(systemLabel));
+    const sysAgg = bySystemMap.get(systemId);
+    sysAgg.roomCount += 1;
+    accumulate(sysAgg, v);
+
+    if (!byFloorMap.has(floorId)) byFloorMap.set(floorId, emptyAggregate(floorLabel));
+    const flrAgg = byFloorMap.get(floorId);
+    flrAgg.roomCount += 1;
+    accumulate(flrAgg, v);
+  }
+
+  const bySystem = [...bySystemMap.values()].map(finalizeAggregate);
+  const byFloor = [...byFloorMap.values()].map(finalizeAggregate);
+
+  const building = emptyAggregate(project.projectName || "建物全体");
+  building.roomCount = project.rooms.length;
+  for (const s of bySystem) {
+    building.validRoomCount += s.validRoomCount;
+    building.floorArea += s.floorArea;
+    building.designLoadCoolingKW += s.designLoadCoolingKW;
+    building.designLoadHeatingKW += s.designLoadHeatingKW;
+    building.requiredCapacityKW += s.requiredCapacityKW;
+    building.ventilationM3h += s.ventilationM3h;
+    building.occupantSensibleKW += s.occupantSensibleKW;
+    building.occupantLatentKW += s.occupantLatentKW;
+  }
+  finalizeAggregate(building);
+  // 建物全体の必要容量は「各室必要容量の合算」ではなく、冷暖房それぞれの合算の大きい方。
+  building.requiredCapacityKW = Math.max(building.designLoadCoolingKW, building.designLoadHeatingKW);
+  building.basis = building.designLoadCoolingKW >= building.designLoadHeatingKW ? "cooling" : "heating";
+
+  return { byRoom, bySystem, byFloor, building };
 }

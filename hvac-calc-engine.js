@@ -37,6 +37,72 @@ const AIR_PROPERTIES = {
 // 時刻別集計の代表時刻
 const DETAILED_HOURS = [9, 12, 14, 16];
 
+// 表面熱伝達抵抗 m²·K/W。JIS A 2102-1(建築物の熱性能)等で用いられる一般値。
+// 材料構成から熱通過率Uを算定する場合にのみ使用する(実測値がある場合はuValueを直接指定)。
+const SURFACE_RESISTANCE = {
+  indoor: 0.11,
+  outdoor: 0.04,
+  source: {
+    name: "JIS A 2102-1 / 建築物の熱性能計算における表面熱伝達抵抗の一般値",
+    url: null,
+    confirmedDate: "2026-09-15",
+  },
+  status: "provisional",
+};
+
+/**
+ * 材料構成(厚さ・熱伝導率)から熱通過率Uを算定する。
+ * R = Ri + Σ(t/λ) + Ro、U = 1/R という定義式のみ。新しい係数は追加しない。
+ * uValue が直接指定されている場合はそちらを優先する。
+ */
+function uValueFromMaterials(materials) {
+  if (!Array.isArray(materials) || materials.length === 0) return null;
+  let r = SURFACE_RESISTANCE.indoor + SURFACE_RESISTANCE.outdoor;
+  for (const m of materials) {
+    const thickness = toNum(m.thicknessM) ?? (toNum(m.thicknessMm) !== null ? toNum(m.thicknessMm) / 1000 : null);
+    const lambda = toNum(m.conductivityWmK);
+    if (thickness === null || lambda === null || lambda === 0 || thickness < 0) return null;
+    r += thickness / lambda;
+  }
+  return r > 0 ? 1 / r : null;
+}
+
+/** 面(wall/window/roof/floor)のU値。uValue優先、無ければ材料構成から算定。 */
+function resolveUValue(surface) {
+  const direct = toNum(surface.uValue);
+  if (direct !== null) return direct;
+  return uValueFromMaterials(surface.materials);
+}
+
+// 建築設備設計基準 令和6年版 第4編第1章第2節(3)(4)の負荷項目(原文)。
+// 国土交通省公開PDF: https://www.mlit.go.jp/gobuild/content/001390961.pdf (page 14)
+const R6_ITEM_SOURCE = {
+  name: "建築設備設計基準 令和6年版 第4編第1章第2節 空調熱負荷計算(3)(4)",
+  url: "https://www.mlit.go.jp/gobuild/content/001390961.pdf",
+  page: 14,
+  confirmedDate: "2026-09-15",
+};
+const R6_LOAD_ITEMS = {
+  cooling: [
+    { no: 1, label: "構造体負荷(顕熱)", implemented: true, component: "envelopeKW" },
+    { no: 2, label: "ガラス面負荷(顕熱)", implemented: true, component: "windowConductionKW + windowSolarKW" },
+    { no: 3, label: "照明負荷(顕熱)", implemented: true, component: "lightingKW" },
+    { no: 4, label: "人体負荷(潜熱及び顕熱)", implemented: true, component: "occupantSensibleKW + occupantLatentKW" },
+    { no: 5, label: "その他の室内負荷(潜熱及び顕熱)", implemented: "partial", component: "equipmentKW(顕熱のみ。その他機器の潜熱原単位が未確認)" },
+    { no: 6, label: "すきま風負荷(潜熱及び顕熱)", implemented: true, component: "infiltrationSensibleKW + infiltrationLatentKW" },
+    { no: 7, label: "外気負荷(潜熱及び顕熱)", implemented: true, component: "outdoorAirSensibleKW + outdoorAirLatentKW" },
+    { no: 8, label: "ダクト及び配管表面からの負荷、空気漏洩による負荷、送風機及びポンプ運転による負荷、間欠空調による蓄熱負荷", implemented: false, component: null },
+  ],
+  heating: [
+    { no: 1, label: "構造体負荷(顕熱)", implemented: true, component: "envelopeKW" },
+    { no: 2, label: "ガラス面負荷(顕熱)", implemented: true, component: "windowConductionKW" },
+    { no: 3, label: "すきま風負荷(潜熱及び顕熱)", implemented: true, component: "infiltrationSensibleKW" },
+    { no: 4, label: "外気負荷(潜熱及び顕熱)", implemented: true, component: "outdoorAirSensibleKW" },
+    { no: 5, label: "ダクト及び配管表面からの負荷、空気漏洩による負荷、送風機及びポンプ運転による負荷、間欠空調による蓄熱負荷", implemented: false, component: null },
+  ],
+  source: R6_ITEM_SOURCE,
+};
+
 // --- 設計用屋外条件(冷房 危険率2.5%) ---
 // 原本未入手のため二次資料経由。冬期(暖房)値・未転記地区は null。
 const R6_DESIGN_OUTDOOR_SOURCE = {
@@ -133,8 +199,8 @@ function computeDetailedLoad(input) {
   const notVerified = [];
   const defaultedFromR6 = [];
 
-  const area = Number(p.floorAreaTotal);
-  if (!Number.isFinite(area) || area <= 0) {
+  const area = toNum(p.floorAreaTotal);
+  if (area === null || area <= 0) {
     return {
       status: "invalid", method: "detailed",
       reason: "面積が0以下、または未入力です。詳細方式では計算できません(要確認)。",
@@ -190,15 +256,15 @@ function computeDetailedLoad(input) {
   const floorEnv = p.floorEnvelope || null;
   const interiorDeltaTK = toNum(p.interiorDeltaTK) ?? 0;
 
-  const uaOf = (w) => { const u = toNum(w.uValue); const a = toNum(w.area); return u !== null && a !== null ? u * a : 0; };
+  const uaOf = (w) => { const u = resolveUValue(w); const a = toNum(w.area); return u !== null && a !== null ? u * a : 0; };
   const wallUA = walls.reduce((s, w) => s + uaOf(w), 0);
-  if (walls.some((w) => toNum(w.uValue) === null)) notVerified.push("外壁の熱貫流率U値(未入力の面があります)");
+  if (walls.some((w) => resolveUValue(w) === null)) notVerified.push("外壁の熱貫流率U値(未入力の面があります)");
   const winUASum = windows.reduce((s, w) => s + uaOf(w), 0);
-  if (windows.some((w) => toNum(w.uValue) === null)) notVerified.push("窓の熱貫流率U値(未入力の面があります)");
+  if (windows.some((w) => resolveUValue(w) === null)) notVerified.push("窓の熱貫流率U値(未入力の面があります)");
   const roofUA = roof ? uaOf(roof) : 0;
-  if (roof && toNum(roof.uValue) === null) notVerified.push("屋根の熱貫流率U値");
+  if (roof && resolveUValue(roof) === null) notVerified.push("屋根の熱貫流率U値");
   const floorUA = floorEnv ? uaOf(floorEnv) : 0;
-  if (floorEnv && toNum(floorEnv.uValue) === null) notVerified.push("床の熱貫流率U値");
+  if (floorEnv && resolveUValue(floorEnv) === null) notVerified.push("床の熱貫流率U値");
   if (!floorEnv) notVerified.push("床の熱貫流率U値・暖房設計用地中温度");
   if (floorEnv && toNum(p.groundTemperature) === null) {
     notVerified.push("暖房設計用地中温度(未転記。床は冷房・暖房とも寄与0として計算しています)");
@@ -211,8 +277,9 @@ function computeDetailedLoad(input) {
 
   // --- 外気・換気・すきま風 ---
   const heatRecovery = p.heatRecovery || {};
-  const recoveryEff = heatRecovery.enabled === true && Number.isFinite(Number(heatRecovery.efficiency))
-    ? Math.max(0, Math.min(1, Number(heatRecovery.efficiency) / 100)) : 0;
+  const recoveryEfficiencyInput = toNum(heatRecovery.efficiency);
+  const recoveryEff = heatRecovery.enabled === true && recoveryEfficiencyInput !== null
+    ? Math.max(0, Math.min(1, recoveryEfficiencyInput / 100)) : 0;
   if (heatRecovery.enabled === true && recoveryEff === 0) notVerified.push("熱交換効率");
 
   let outdoorAirVolumeM3h = toNum(p.outdoorAirVolumeM3h);
@@ -285,15 +352,24 @@ function computeDetailedLoad(input) {
 
     // 暖房(貫流 + 外気顕熱 + すきま風顕熱。日射・内部発熱は安全側で見込まない)
     let heatingTotalKW = null;
+    let heatingComponents = null;
     if (heatingOutdoorDB !== null) {
       const dTHeating = tinHeating - heatingOutdoorDB;
-      const envHeating = conductionKW(wallUA, 1, dTHeating) + conductionKW(roofUA, 1, dTHeating);
+      const dTHeatingGround = 0; // 暖房設計用地中温度が未転記のため床は寄与0
+      const envHeating = conductionKW(wallUA, 1, dTHeating) + conductionKW(roofUA, 1, dTHeating) + conductionKW(floorUA, 1, dTHeatingGround);
       const winHeating = conductionKW(winUASum, 1, dTHeating);
       const interiorHeating = conductionKW(interiorUA, 1, interiorDeltaTK);
       const oaSensibleHeating = airSensibleKW(outdoorAirVolumeM3h, dTHeating) * (1 - recoveryEff);
       const infVolumeHeating = roomVolumeM3 !== null && infAirChangeHeating !== null ? roomVolumeM3 * infAirChangeHeating : 0;
       const infVolumeHeatingTotal = infVolumeHeating + infWindowCooling;
       const infSensibleHeating = airSensibleKW(infVolumeHeatingTotal, dTHeating);
+      heatingComponents = {
+        envelopeKW: envHeating,
+        windowConductionKW: winHeating,
+        interiorWallKW: interiorHeating,
+        outdoorAirSensibleKW: oaSensibleHeating,
+        infiltrationSensibleKW: infSensibleHeating,
+      };
       heatingTotalKW = envHeating + winHeating + interiorHeating + oaSensibleHeating + infSensibleHeating;
     }
 
@@ -320,6 +396,7 @@ function computeDetailedLoad(input) {
       coolingLatentKW,
       coolingTotalKW,
       heatingTotalKW,
+      heatingComponents,
     };
   });
 
@@ -358,16 +435,20 @@ function computeDetailedLoad(input) {
       heatingKW: peakHeating ? peakHeating.heatingTotalKW : null,
     },
     breakdown: peakCooling.components,
+    heatingBreakdown: peakHeating ? peakHeating.heatingComponents : null,
     ventilationM3h: outdoorAirVolumeM3h,
     infiltrationVolumeM3h: peakCooling.infiltrationVolumeM3h,
     designLoadCoolingKW,
     designLoadHeatingKW,
     basis,
     requiredCapacityKW,
+    loadItems: R6_LOAD_ITEMS,
     coefficientSources: {
       airProperties: AIR_PROPERTIES.source,
       designOutdoor: R6_DESIGN_OUTDOOR_SOURCE,
       internalLoad: R6_INTERNAL_LOAD_SOURCE,
+      loadItems: R6_ITEM_SOURCE,
+      surfaceResistance: SURFACE_RESISTANCE.source,
     },
   };
 }
@@ -822,6 +903,49 @@ function computeRoomLoad(project, room) {
   return computeAll(legacyInput); // 既存のcomputeAll(SHARED-LOGICブロック内、不変)をそのまま使用
 }
 
+/**
+ * 【R6詳細方式のアダプター】新モデルのRoom1件を computeDetailedLoad() の入力へ翻訳する。
+ *
+ * computeLoad 用の roomToLegacyLoadInput と同じく「翻訳のみ」で、新しい係数・式は持たない。
+ * 未指定(null)は null のまま渡す(toNum()が「未入力」として扱う)。
+ */
+function roomToDetailedLoadInput(project, room) {
+  const env = room.envelope || {};
+  const oa = room.outdoorAir || {};
+  const internal = room.internalHeat || {};
+  return {
+    regionId: project.regionId,
+    usage: room.usage || project.buildingTypeId,
+    floorAreaTotal: room.floorArea,
+    ceilingHeight: room.ceilingHeight,
+    occupants: room.occupancy,
+    coolingSetTemp: room.indoorTemperature ? room.indoorTemperature.cooling : null,
+    heatingSetTemp: room.indoorTemperature ? room.indoorTemperature.heating : null,
+    indoorRHCooling: room.indoorHumidity ? room.indoorHumidity.cooling : null,
+    indoorRHHeating: room.indoorHumidity ? room.indoorHumidity.heating : null,
+    lightingWm2: internal.lightingWm2,
+    equipmentWm2: internal.equipmentWm2,
+    others: Array.isArray(internal.others) ? internal.others : [],
+    outdoorAirVolumeM3h: oa.volumeM3h,
+    heatRecovery: oa.heatRecovery || { enabled: false, efficiency: null },
+    infiltration: oa.infiltration || {},
+    walls: Array.isArray(env.walls) ? env.walls : [],
+    roof: env.roof || null,
+    floorEnvelope: env.floor || null,
+    interiorWalls: Array.isArray(env.interiorWalls) ? env.interiorWalls : [],
+    windows: Array.isArray(room.windows) ? room.windows : [],
+    marginPct: project.marginPct,
+  };
+}
+
+/**
+ * 【R6詳細方式のアダプター】Room1件を詳細方式で計算する。
+ * 計算式は computeDetailedLoad() 側にのみ存在する(ここは委譲のみ)。
+ */
+function computeRoomDetailedLoad(project, room) {
+  return computeDetailedLoad(roomToDetailedLoadInput(project, room));
+}
+
 module.exports = {
   BUILDING_TYPES, REGIONS, PACKAGE_SIZES, OCCUPANT_HEAT, EQUIPMENT_DB,
   computeLoad, selectEquipment, computeAll,
@@ -831,7 +955,10 @@ module.exports = {
   roomToLegacyLoadInput, computeRoomLoad,
   // 【R6詳細方式】積み上げ計算(既存SHARED-LOGICは変更しない)
   computeDetailedLoad,
-  R6_INTERNAL_LOAD, R6_DESIGN_OUTDOOR, AIR_PROPERTIES, DETAILED_HOURS,
+  R6_INTERNAL_LOAD, R6_DESIGN_OUTDOOR, AIR_PROPERTIES, DETAILED_HOURS, R6_LOAD_ITEMS,
+  SURFACE_RESISTANCE, uValueFromMaterials,
+  // 新モデルRoom → R6詳細方式入力への翻訳(project-model.mjs と1対1)
+  roomToDetailedLoadInput, computeRoomDetailedLoad,
 };
 
 // ============================================================================
