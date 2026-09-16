@@ -344,7 +344,10 @@ export function getStepStatus(project, calc) {
     done: anyRoom && rooms.every((r) => isFilled(r.floorArea) && !!r.name),
     issues: !anyRoom
       ? ["室が1つも登録されていません。"]
-      : rooms.filter((r) => !isFilled(r.floorArea)).map((r) => `${r.name || "(室名未設定)"}: 面積が未入力です。`),
+      : [
+          ...rooms.filter((r) => !r.name).map(() => "室名が未入力の室があります。室名は帳票の識別に使用します。"),
+          ...rooms.filter((r) => !isFilled(r.floorArea)).map((r) => `${r.name || "(室名未設定)"}: 面積が未入力です。`),
+        ],
   };
   status.conditions = {
     done: anyRoom && rooms.every((r) => isFilled(r.indoorTemperature?.cooling) && isFilled(r.indoorTemperature?.heating)),

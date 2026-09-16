@@ -31,10 +31,22 @@
 最終採用は **Design B(段階誘導型)**。`?design=A|B|C` で3案を比較できる
 (未指定は B。比較UIは `?design` 指定時のみ表示)。詳細は `design-comparison.md`。
 
+## LOAD CORE の固定(重要)
+
+計算COREの数値は `core-lock.test.mjs` で凍結されている。`npm test` に含まれる。
+COREハッシュ(8用途×8地域=64ケース):
+`827a1d30c7f576b84087492f86d45bb0cfcbaf8d5329591a73c42a60cd869384`
+
+計算式・係数を変更する場合は、**変更根拠と「変更前 → 変更後」を必ず記録**し、
+`UPDATE_CORE_LOCK=1 node core-lock.test.mjs` で期待値を更新すること。
+根拠なく数値を変えてはならない。
+
+STABRO / SeACD との照合結果は `stabro-seacd-audit-2026-09-15.md`。
+
 ## テスト
 
 ```bash
-npm test          # unit/integration(engine, csv, storage, validation, model, weather)
+npm test          # unit/integration(engine, core-lock, csv, storage, validation, model, weather)
 npm run check:sync # engine と SHARED-LOGIC の一致確認
 npm run build
 npm run test:e2e  # Playwright 実ブラウザ 42ケース
