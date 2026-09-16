@@ -108,7 +108,14 @@ export function buildDetailedReport({ project, loadResult, aggregate, roomResult
       ["潜熱合計", kw(loadResult.peak.coolingLatentKW)],
       ["全熱合計", kw(loadResult.peak.coolingKW)],
     ],
-    heatingBreakdown: Object.entries(hbd).map(([k, v]) => [k, kw(v)]),
+    heatingBreakdown: [
+      ["構造体負荷", kw(hbd.envelopeKW)],
+      ["窓 貫流負荷", kw(hbd.windowConductionKW)],
+      ["内壁負荷", kw(hbd.interiorWallKW)],
+      ["外気負荷(顕熱)", kw(hbd.outdoorAirSensibleKW)],
+      ["すきま風負荷(顕熱)", kw(hbd.infiltrationSensibleKW)],
+      ["暖房 全熱合計", kw(loadResult.peak.heatingKW)],
+    ],
     // 時刻別一覧
     hourly: (loadResult.hourlyResults || []).map((h) => [
       `${h.hour} 時`,

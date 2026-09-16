@@ -67,7 +67,10 @@ check(report.maximums.some(([k, v, t]) => k === "冷房 最大全熱" && /時/.t
 check(report.breakdown.length === 15, "負荷内訳が15行(12項目+顕熱/潜熱/全熱)");
 check(report.breakdown.some(([k]) => k === "窓 日射負荷"), "内訳に日射負荷がある");
 check(report.breakdown.some(([k]) => k === "すきま風負荷(潜熱)"), "内訳にすきま風潜熱がある");
-check(report.heatingBreakdown.length === 5, "暖房内訳が5項目");
+check(report.heatingBreakdown.length === 6, "暖房内訳が6行(5項目+全熱合計)");
+check(report.heatingBreakdown.every(([k]) => /^[^a-zA-Z]*$/.test(k)), "暖房内訳の見出しが日本語(英字キーを露出しない)");
+check(report.heatingBreakdown.some(([k]) => k === "構造体負荷"), "暖房内訳に構造体負荷がある");
+check(report.heatingBreakdown.some(([k]) => k === "暖房 全熱合計"), "暖房内訳に全熱合計がある");
 
 // 時刻別
 check(report.hourly.length === 4, "時刻別一覧が4時刻");
