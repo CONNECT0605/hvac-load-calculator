@@ -108,8 +108,8 @@ STABRO項目 → UI入力 → データモデル → engine変数 → 係数 →
 | 室集計 | `aggregateProject().byRoom` | **PASS** |
 | 系統集計 | `aggregateProject().bySystem`(+階+建物) | **PASS** |
 | レポート | `detailed-report.mjs`(8+5項目・最大負荷一覧・内訳・時刻別・集計・出典) | **PASS** |
-| 系統集計のUI表示 | `Room.systemId` の入力欄がUIに未追加 | **FAIL** |
-| レポートのUI接続 | 帳票画面は原単位方式のレポート表示のまま(詳細レポートは未接続) | **FAIL** |
+| 系統集計のUI表示 | `Room.systemId` の入力欄をSTEP3(室)に追加(`detailed-building.mjs`の`aggregateDetailedProject`で系統別に集約) | **PASS** |
+| レポートのUI接続 | 帳票画面から「詳細方式の計算書」へ遷移(`DetailedReportScreen`)。印刷`PrintDetailedReport`・CSV`downloadDetailedCsv`も接続 | **PASS** |
 
 ---
 
@@ -145,8 +145,8 @@ STABRO項目 → UI入力 → データモデル → engine変数 → 係数 →
 | 14 | 基準値で補完した項目 | `defaultedFromR6` | **PASS** |
 | 15 | 未確認事項 | `notVerified` | **PASS** |
 | 16 | 警告 | `warnings` | **PASS** |
-| 17 | チェックリスト出力 | ― | **FAIL** |
-| 18 | 帳票の画面表示・印刷・CSV出力への接続 | 帳票画面は原単位方式のまま | **FAIL** |
+| 17 | チェックリスト出力 | `checklist`(負荷項目の実装状態・SI単位・集計・出典・未確認・推測値0件を明示) | **PASS** |
+| 18 | 帳票の画面表示・印刷・CSV出力への接続 | `DetailedReportScreen`/`PrintDetailedReport`/`buildDetailedCsv` に接続(E2E 18〜20で検証) | **PASS** |
 
 ---
 
@@ -193,7 +193,7 @@ E2E(Playwright)    → 42 passed
 | 個数一致 | **PASS**(冷房8・暖房5の個数を保持) |
 | 順序一致 | **PASS**(公的基準の順序そのまま) |
 | 入力接続 | **PASS**(62件の因果テスト) |
-| データモデル接続 | **FAIL**(系統集計のUI入力欄が未追加、詳細レポートのUI未接続) |
+| データモデル接続 | **PASS**(系統集計のUI入力欄を追加、詳細レポートのUI・印刷・CSVを接続) |
 | 計算式一致 | **PASS**(確認できた式は基準どおり) |
 | 係数・標準値一致 | **FAIL**(非公開係数が残存) |
 | 単位一致 | **PASS**(SI単位のみ) |
@@ -204,8 +204,8 @@ E2E(Playwright)    → 42 passed
 | 最大負荷一覧一致 | **PASS**(7項目+時刻) |
 | 負荷詳細一致 | **PASS**(8+5項目) |
 | 室集計一致 | **PASS** |
-| 系統集計一致 | **PASS**(計算部。UI未接続のため FAIL と記載) |
-| レポート出力項目一致 | **FAIL**(17・18) |
+| 系統集計一致 | **PASS**(計算部・UI接続ともに実装) |
+| レポート出力項目一致 | **PASS**(17・18とも実装) |
 | 未実装 | **FAIL 8件残存**(§1のFAIL) |
 | 未確認 | **FAIL 残存**(§0-2の非公開データ) |
 | 推測値 | **0**(未確認はnullのまま) |

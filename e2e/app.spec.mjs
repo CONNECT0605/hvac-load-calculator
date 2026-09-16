@@ -331,3 +331,64 @@ test("17 保存データ破損・未知IDでも起動し、計算を継続でき
   await openStep(page, "結果");
   expect(parseKws(await stepBody(page).innerText()).length).toBeGreaterThan(0);
 });
+
+// 18
+test("18 詳細方式の熱負荷計算書が表示され、8+5項目・出典・未確認事項・チェックリストが出る", async ({ page }) => {
+  await buildProject(page, { name: "詳細帳票テスト", area: 300, roomArea: 300 });
+  await runCalc(page);
+  await gotoScreen(page, "レポート");
+  await page.getByRole("button", { name: "詳細方式の計算書" }).click();
+  const main = page.locator("main");
+  await expect(main).toContainText("熱負荷計算書(R6詳細方式)");
+  await expect(main).toContainText("負荷詳細(冷房 8項目)");
+  await expect(main).toContainText("負荷詳細(暖房 5項目)");
+  await expect(main).toContainText("構造体負荷");
+  await expect(main).toContainText("係数と出典");
+  await expect(main).toContainText("未確認事項");
+  await expect(main).toContainText("チェックリスト");
+  await expect(main).toContainText("建築設備設計基準");
+});
+
+// 19
+test("19 詳細方式のCSVがダウンロードでき、集計・チェックリスト・出典を含む", async ({ page }) => {
+  await buildProject(page, { name: "詳細CSVテスト", area: 300, roomArea: 300 });
+  await runCalc(page);
+  await gotoScreen(page, "レポート");
+  await page.getByRole("button", { name: "詳細方式の計算書" }).click();
+  const [dl] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "CSV出力(詳細)" }).click(),
+  ]);
+  const buf = (await import("node:fs")).readFileSync(await dl.path());
+  expect(buf.subarray(0, 3).toString("hex")).toBe("efbbbf");
+  const csv = buf.toString("utf-8");
+  expect(csv).toMatch(/系統集計|階集計|建物集計/);
+  expect(csv).toContain("チェックリスト");
+  expect(csv).toContain("係数の出典");
+  expect(csv).toContain("建築設備設計基準");
+});
+
+// 20
+test("20 室に空調系統名を入力でき、詳細帳票の系統集計に反映される", async ({ page }) => {
+  await buildProject(page, { name: "系統テスト", area: 300, roomArea: 300 });
+  await openStep(page, "室");
+  const body = stepBody(page);
+  const firstRow = body.locator("table tbody tr").first();
+  const systemInput = firstRow.locator("input[type=text]").nth(1);
+  await systemInput.fill("系統A");
+  await page.waitForTimeout(200);
+  await runCalc(page);
+  await gotoScreen(page, "レポート");
+  await page.getByRole("button", { name: "詳細方式の計算書" }).click();
+  await expect(page.locator("main")).toContainText("系統A");
+
+  // 保存 → 読込でも系統名が保持される
+  await page.getByRole("button", { name: "入力に戻る" }).click();
+  await page.getByRole("button", { name: "案件を保存" }).click();
+  await page.waitForTimeout(400);
+  await gotoScreen(page, "案件一覧");
+  await page.getByRole("button", { name: "開く" }).first().click();
+  await page.waitForTimeout(600);
+  await openStep(page, "室");
+  await expect(stepBody(page).locator("table tbody tr").first().locator("input[type=text]").nth(1)).toHaveValue("系統A");
+});

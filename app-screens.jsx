@@ -362,7 +362,7 @@ export function ProjectListScreen({ savedProjects, currentProjectId, onOpenProje
   );
 }
 
-export function ReportScreen({ project, calc, report, onDownloadCsv, onPrint, onBack }) {
+export function ReportScreen({ project, calc, report, onDownloadCsv, onPrint, onDetailed, onBack }) {
   if (!calc || calc.totals.validRoomCount === 0 || !report) {
     return (
       <Panel title="レポート" tone="accent">
@@ -388,6 +388,7 @@ export function ReportScreen({ project, calc, report, onDownloadCsv, onPrint, on
         actions={
           <>
             <Button size="sm" onClick={onBack}>入力に戻る</Button>
+            {onDetailed && <Button size="sm" onClick={onDetailed}>詳細方式の計算書</Button>}
             <Button size="sm" onClick={onDownloadCsv}>CSV出力</Button>
             <Button size="sm" variant="primary" onClick={onPrint}>印刷 / PDF</Button>
           </>
@@ -439,6 +440,80 @@ export function ReportScreen({ project, calc, report, onDownloadCsv, onPrint, on
           {report.notices.map((notice) => <li key={notice}>・{notice}</li>)}
         </ul>
       </Panel>
+    </div>
+  );
+}
+
+/**
+ * R6詳細方式(積み上げ)の熱負荷計算書。計算はせず、detailed-report.mjs の整形結果を表示する。
+ */
+export function DetailedReportScreen({ project, detailedReport, onDownloadCsv, onPrint, onBack }) {
+  if (!detailedReport) {
+    return (
+      <Panel title="熱負荷計算書(R6詳細方式)" tone="accent">
+        <EmptyState message="計算可能な室がないため詳細方式の計算書を作成できません。" action={<Button size="sm" onClick={onBack}>入力に戻る</Button>} />
+      </Panel>
+    );
+  }
+  const section = (title, rows, head = ["項目", "内容", "補足"]) => (
+    <Panel title={title} key={title}>
+      <Table head={head.map((label, i) => ({ label, align: i === 0 ? "left" : "left" }))}>
+        {rows.map((row, i) => (
+          <tr key={`${title}-${i}`}>
+            {row.map((cell, j) => <Td key={j}>{cell}</Td>)}
+          </tr>
+        ))}
+      </Table>
+    </Panel>
+  );
+  const r = detailedReport;
+  const maxOf = (label) => r.maximums.find((m) => m[0] === label);
+  const numOf = (label) => {
+    const row = maxOf(label);
+    return row ? Number(String(row[1]).replace(/[^\d.-]/g, "")) : NaN;
+  };
+  return (
+    <div className="flex flex-col gap-4 no-print">
+      <Panel
+        title="熱負荷計算書(R6詳細方式)"
+        subtitle={`${r.project.name} / 出力日時 ${dateTime(r.generatedAt)}`}
+        tone="accent"
+        actions={
+          <>
+            <Button size="sm" onClick={onBack}>入力に戻る</Button>
+            <Button size="sm" onClick={onDownloadCsv}>CSV出力(詳細)</Button>
+            <Button size="sm" variant="primary" onClick={onPrint}>印刷 / PDF</Button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          <Stat label="設計用必要冷房能力" value={num(numOf("設計用冷房負荷(余裕率込)"), 1)} unit="kW" tone="cooling" />
+          <Stat label="最大冷房全熱" value={num(numOf("冷房 最大全熱"), 1)} unit="kW" tone="cooling" />
+          <Stat label="最大冷房発生時刻" value={maxOf("冷房 最大全熱") ? String(maxOf("冷房 最大全熱")[2]).replace(" 時", "") : "―"} unit="時" />
+          <Stat label="必要換気量" value={String((r.ventilation.find((v) => v[0] === "外気量") || ["", "―"])[1]).replace(/ m³\/h/, "")} unit="m³/h" tone="blue" />
+        </div>
+        <div className="mt-4">
+          <Note tone="warn">{r.method}</Note>
+        </div>
+      </Panel>
+
+      {section("設計条件", r.conditions.map(([k, v]) => [k, v]))}
+      {section("最大負荷一覧", r.maximums.map(([k, v, t]) => [k, v, t]))}
+      {section("負荷詳細(冷房 8項目)", r.coolingItems.map((row) => [`${row[0]}. ${row[1]}`, row[3], row[2]]))}
+      {section("負荷詳細(暖房 5項目)", r.heatingItems.map((row) => [`${row[0]}. ${row[1]}`, row[3], row[2]]))}
+      {section("負荷内訳(冷房・ピーク時刻)", (r.breakdown || []).map(([k, v]) => [k, v]))}
+      {section("負荷内訳(暖房・ピーク時刻)", (r.heatingBreakdown || []).map(([k, v]) => [k, v]))}
+      {section("時刻別一覧", r.hourly.map((row) => [row[0], `顕熱 ${row[2]} / 潜熱 ${row[3]} / 全熱 ${row[4]}`, `暖房 ${row[5]} / 外気 ${row[1]}`]))}
+      {section("室別集計", r.aggregateRooms.map((row) => [row[0], `冷房 ${row[4]} / 暖房 ${row[5]}`, `${row[1]} / ${row[2]} / ${row[3]}`]))}
+      {section("系統集計", r.aggregateSystems.map((row) => [row[0], `冷房 ${row[3]} / 暖房 ${row[4]}`, `基準 ${row[5]} / ${row[1]} / ${row[2]}`]))}
+      {section("階集計", r.aggregateFloors.map((row) => [row[0], `冷房 ${row[3]} / 暖房 ${row[4]}`, `${row[1]} / ${row[2]}`]))}
+      {section("建物集計", r.aggregateBuilding.map((row) => [row[0], `冷房 ${row[3]} / 暖房 ${row[4]}`, `基準 ${row[5]} / ${row[1]} / ${row[2]}`]))}
+      {section("換気量・すきま風量", r.ventilation.map(([k, v]) => [k, v]))}
+      {section("係数と出典", r.coefficientSources.map((row) => [row[0], `${row[1]}`, `${row[2]} / ${row[4]}`]))}
+      {section("基準値で補完した項目", r.defaultedFromR6.map((d) => [d, "基準値で補完", ""]))}
+      {section("未確認事項(値を創作せず明示)", r.notVerified.map((n) => [n, "要確認", ""]))}
+      {section("警告", r.warnings.length ? r.warnings.map((w) => [w, "要確認", ""]) : [["警告はありません。", "", ""]])}
+      {section("チェックリスト", r.checklist.map((row) => [row[1], row[2], row[3]]))}
     </div>
   );
 }

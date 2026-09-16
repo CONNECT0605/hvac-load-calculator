@@ -150,5 +150,24 @@ export function buildDetailedReport({ project, loadResult, aggregate, roomResult
     // 未確認事項(隠さない)
     notVerified,
     warnings: loadResult.warnings || [],
+    // チェックリスト(実装状態の自己点検。数値の創作は行わない)
+    checklist: buildChecklist({ items, notVerified, defaultedFromR6, warnings: loadResult.warnings || [], sourceRows }),
   };
+}
+
+function buildChecklist({ items, notVerified, defaultedFromR6, warnings, sourceRows }) {
+  const rows = [];
+  const stateLabel = (implemented) => (implemented === true ? "実装済" : implemented === "partial" ? "一部実装" : "未実装");
+  for (const it of items.cooling || []) rows.push(["冷房", `負荷項目 ${it.no}. ${it.label}`, stateLabel(it.implemented), it.implemented === true ? "計算に反映" : "係数・データ未確認のため計算に未反映"]);
+  for (const it of items.heating || []) rows.push(["暖房", `負荷項目 ${it.no}. ${it.label}`, stateLabel(it.implemented), it.implemented === true ? "計算に反映" : "係数・データ未確認のため計算に未反映"]);
+  rows.push(["計算", "時刻別の最大負荷抽出", "実装済", "同一時刻で室別負荷を合算し、時系列の最大値を採用"]);
+  rows.push(["計算", "冷暖房別々の設計用負荷と選定基準", "実装済", "設計用負荷の大きい方を選定基準とする"]);
+  rows.push(["単位", "SI単位(kW・m²・m³/h・℃・%)", "実装済", "SF・BTU/hr・tonnageは未使用"]);
+  rows.push(["集計", "室 → 系統 → 階 → 建物", "実装済", "合算のみ(新しい式なし)"]);
+  rows.push(["出典", "係数の出典記録", sourceRows.length ? "記録済" : "未記録", `${sourceRows.length}件の係数に出典を付与`]);
+  for (const d of defaultedFromR6) rows.push(["基準値補完", d, "基準値で補完", "入力が無い項目を基準値で補完(補完した旨を明示)"]);
+  for (const n of notVerified) rows.push(["未確認", n, "要確認", "非公開データ等のため未確定。値を創作せず未確認として明示"]);
+  for (const w of warnings) rows.push(["警告", w, "要確認", "計算結果の確認事項"]);
+  rows.push(["誠実表示", "推測値・ダミー値の混入", "0件", "根拠のない係数・計算式を追加していない"]);
+  return rows;
 }

@@ -1,0 +1,146 @@
+// stabro-detailed-ui.test.mjs
+// R6詳細方式の建物集計・帳票接続の検証。
+// 目的: 「詳細方式の計算 → 建物集計 → 帳票 → CSV」が接続されていることを機械的に確認する。
+// ここで検証するのは接続と整形であり、新しい係数・計算式の正当性は主張しない。
+import { createRequire } from "node:module";
+import { createProjectDoc, createFloor, createRoom } from "./project-model.mjs";
+import { computeDetailedProject, toReportLoadResult, aggregateDetailedProject } from "./detailed-building.mjs";
+import { buildDetailedReport } from "./detailed-report.mjs";
+import { buildDetailedCsv } from "./export-csv.mjs";
+
+const require = createRequire(import.meta.url);
+const engine = require("./hvac-calc-engine.js");
+
+let pass = 0; let fail = 0;
+function check(cond, name) {
+  if (cond) { pass += 1; console.log(`✅ PASS: ${name}`); }
+  else { fail += 1; console.log(`❌ FAIL: ${name}`); }
+}
+const close = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
+
+const f1 = createFloor({ name: "1F", level: 1 });
+const f2 = createFloor({ name: "2F", level: 2 });
+const project = createProjectDoc({
+  projectName: "詳細接続テスト", regionId: "kanto", buildingTypeId: "office", marginPct: 0,
+  floors: [f1, f2],
+  rooms: [
+    createRoom({ floorId: f1.floorId, name: "A", usage: "office", floorArea: 100, occupancy: 10, systemId: "系統1" }),
+    createRoom({ floorId: f1.floorId, name: "B", usage: "office", floorArea: 100, occupancy: 10, systemId: "系統1" }),
+    createRoom({ floorId: f2.floorId, name: "C", usage: "office", floorArea: 100, occupancy: 10, systemId: "系統2" }),
+  ],
+});
+
+console.log("=== R6詳細方式 建物集計・帳票接続テスト ===");
+
+const detailed = computeDetailedProject(project);
+check(detailed.validRoomCount === 3, "詳細方式で3室すべてが計算可能");
+check(detailed.hourly.length === engine.DETAILED_HOURS.length, "時刻別結果が時刻数だけある");
+
+// 合算方式: 同一時刻の室別負荷を加算し、その最大値を採用する
+const manualHourSum = engine.DETAILED_HOURS.map((hour, i) => {
+  const sum = project.rooms.reduce((acc, room) => {
+    const input = engine.roomToDetailedLoadInput(project, room);
+    const l = engine.computeDetailedLoad(input);
+    const h = l.hourlyResults.find((x) => x.hour === hour);
+    return acc + h.coolingTotalKW;
+  }, 0);
+  return { hour, sum, reported: detailed.hourly[i].coolingTotalKW };
+});
+check(manualHourSum.every((r) => close(r.sum, r.reported)), "各時刻の建物負荷 = 室別負荷の同時刻合算");
+const manualPeak = Math.max(...manualHourSum.map((r) => r.sum));
+check(close(detailed.peak.coolingKW, manualPeak), "建物の最大冷房負荷 = 同時刻合算の最大値");
+check(close(detailed.designLoadCoolingKW, manualPeak * 1.0), "余裕率0のとき設計用=最大負荷");
+check(detailed.designLoadHeatingKW === null, "暖房設計外気温度が未確認のため暖房は未算定(null)");
+check(detailed.requiredCapacityKW === detailed.designLoadCoolingKW, "暖房未算定時は冷房を選定基準とする");
+
+// ビル全体の必要換気量は室別換気量の合算
+const manualVent = project.rooms.reduce((acc, room) => {
+  const l = engine.computeDetailedLoad(engine.roomToDetailedLoadInput(project, room));
+  return acc + l.ventilationM3h;
+}, 0);
+check(close(detailed.ventilationM3h, manualVent), "建物の必要換気量 = 室別換気量の合算");
+
+// 集計(室→系統→階→建物)
+const aggregate = aggregateDetailedProject(project, detailed);
+check(aggregate.byRoom.length === 3, "室別集計が全室分ある");
+check(aggregate.bySystem.length === 2, "系統別集計が系統数だけある");
+check(aggregate.byFloor.length === 2, "階別集計が階数だけある");
+check(aggregate.bySystem.find((s) => s.label === "系統1").roomCount === 2, "系統1に2室が集約される");
+check(aggregate.bySystem.find((s) => s.label === "系統2").roomCount === 1, "系統2に1室が集約される");
+const sysSum = aggregate.bySystem.reduce((a, s) => a + s.designLoadCoolingKW, 0);
+check(close(sysSum, aggregate.building.designLoadCoolingKW), "系統別冷房負荷の合計 = 建物全体");
+const floorSum = aggregate.byFloor.reduce((a, f) => a + f.designLoadCoolingKW, 0);
+check(close(floorSum, aggregate.building.designLoadCoolingKW), "階別冷房負荷の合計 = 建物全体");
+check(close(aggregate.building.designLoadCoolingKW, detailed.designLoadCoolingKW), "建物集計の冷房負荷 = 詳細方式の設計用負荷");
+
+// 系統未設定は「系統未設定」として集約され、除外されない
+const noSys = createProjectDoc({
+  regionId: "kanto", buildingTypeId: "office",
+  floors: [f1],
+  rooms: [createRoom({ floorId: f1.floorId, name: "X", usage: "office", floorArea: 50, occupancy: 5 })],
+});
+const noSysAgg = aggregateDetailedProject(noSys, computeDetailedProject(noSys));
+check(noSysAgg.bySystem.length === 1 && noSysAgg.bySystem[0].label === "系統未設定", "系統未設定の室も「系統未設定」として集計される");
+
+// 帳票接続
+const reportInput = toReportLoadResult(detailed);
+const report = buildDetailedReport({
+  project,
+  loadResult: reportInput,
+  aggregate,
+  rooms: project.rooms,
+  floors: project.floors,
+  regions: engine.REGIONS,
+  buildingTypes: engine.BUILDING_TYPES,
+});
+check(report.title === "熱負荷計算書(R6詳細方式)", "帳票タイトルがR6詳細方式");
+check(report.coolingItems.length === 8, "帳票の冷房負荷項目が8項目");
+check(report.heatingItems.length === 5, "帳票の暖房負荷項目が5項目");
+check(report.hourly.length === engine.DETAILED_HOURS.length, "帳票の時刻別一覧が時刻数だけある");
+check(report.aggregateSystems.length === 2, "帳票の系統集計が2系統");
+check(report.aggregateFloors.length === 2, "帳票の階集計が2階");
+check(report.aggregateRooms.length === 3, "帳票の室別集計が3室");
+check(report.coefficientSources.length > 0, "帳票に係数の出典が記録される");
+check(report.notVerified.length > 0, "帳票に未確認事項が明示される(値を創作しない)");
+check(report.defaultedFromR6.length > 0, "帳票に基準値補完が記録される");
+
+// チェックリスト出力(マトリクス§4-17)
+check(Array.isArray(report.checklist) && report.checklist.length > 0, "チェックリストが出力される");
+check(report.checklist.every((row) => row.length === 4), "チェックリストの各行が4列(区分・項目・状態・補足)");
+check(report.checklist.some((row) => row[1].includes("負荷項目 1.")), "チェックリストに負荷項目が列挙される");
+check(report.checklist.some((row) => row[2] === "未実装"), "未実装項目がチェックリストで未実装と明示される");
+check(report.checklist.some((row) => row[2] === "要確認"), "未確認事項がチェックリストで要確認と明示される");
+check(report.checklist.some((row) => row[1] === "推測値・ダミー値の混入" && row[2] === "0件"), "推測値・ダミー値0件が明示される");
+check(report.checklist.some((row) => row[1] === "室 → 系統 → 階 → 建物" && row[2] === "実装済"), "集計の実装状態が明示される");
+check(report.checklist.some((row) => row[1] === "SI単位(kW・m²・m³/h・℃・%)" && row[2] === "実装済"), "SI単位の実装状態が明示される");
+
+// CSV接続(マトリクス§4-18)
+const csv = buildDetailedCsv(report);
+check(csv.startsWith("\ufeff"), "詳細方式CSVがBOM付きUTF-8");
+check((csv.match(/\r\n/g) || []).length > 10, "詳細方式CSVに複数行ある");
+check(csv.includes("系統集計"), "詳細方式CSVに系統集計が含まれる");
+check(csv.includes("チェックリスト"), "詳細方式CSVにチェックリストが含まれる");
+check(csv.includes("係数の出典"), "詳細方式CSVに係数の出典が含まれる");
+check(csv.includes("未確認"), "詳細方式CSVに未確認事項が含まれる");
+// 「BTU/tonnageは未使用」という宣言文は除き、実際に値の単位として使われていないことを確認する。
+const csvLines = csv.split("\r\n").filter((line) => !line.includes("は未使用"));
+check(!csvLines.some((line) => /\d+\s*(BTU|tonnage)/i.test(line)), "詳細方式CSVでヤード・ポンド単位が値として使われない");
+check(csv.includes("建築設備設計基準"), "詳細方式CSVに基準の出典が含まれる");
+
+// 計算不能室は集計に混入しない(status!=="ok"を0扱いしない)
+const withInvalid = createProjectDoc({
+  regionId: "kanto", buildingTypeId: "office",
+  floors: [f1],
+  rooms: [
+    createRoom({ floorId: f1.floorId, name: "有効", usage: "office", floorArea: 100, occupancy: 10 }),
+    createRoom({ floorId: f1.floorId, name: "面積未入力", usage: "office", floorArea: null, occupancy: 0 }),
+  ],
+});
+const invDetailed = computeDetailedProject(withInvalid);
+const invAgg = aggregateDetailedProject(withInvalid, invDetailed);
+check(invDetailed.validRoomCount === 1, "面積未入力の室は計算不能として除外される");
+check(invAgg.byRoom.length === 2, "室別集計には計算不能室も状態付きで残る");
+check(invAgg.bySystem.every((s) => s.validRoomCount === 1), "系統集計には計算不能室の負荷が混入しない");
+
+console.log(`\n=== 詳細方式 建物集計・帳票接続テスト 結果: ${pass}件成功 / ${fail}件失敗 ===`);
+if (fail > 0) process.exit(1);

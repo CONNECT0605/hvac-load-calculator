@@ -23,6 +23,7 @@ import {
 } from "./project-model.mjs";
 import {
   AppHeader,
+  DetailedReportScreen,
   HomeScreen,
   ProjectListScreen,
   ReportScreen,
@@ -45,8 +46,11 @@ import {
   useVariant,
 } from "./design-variants.jsx";
 import { buildProjectReport } from "./report-data.mjs";
-import { downloadCsv } from "./export-csv.mjs";
+import { downloadCsv, downloadDetailedCsv } from "./export-csv.mjs";
+import { computeDetailedProject, toReportLoadResult, aggregateDetailedProject } from "./detailed-building.mjs";
+import { buildDetailedReport } from "./detailed-report.mjs";
 import PrintReport from "./print-report.jsx";
+import PrintDetailedReport from "./print-detailed-report.jsx";
 
 // =====================================================================
 // 空調負荷計算・機器選定ロジック(Single Source of Truth)
@@ -388,6 +392,23 @@ function HVACCalculatorInner() {
         : null,
     [project, calc]
   );
+  // R6詳細方式(積み上げ)。計算の中核は engine の computeDetailedLoad() であり、
+  // ここは室別結果の合算と帳票整形のみを行う。
+  const detailedReport = useMemo(() => {
+    if (calc.totals.validRoomCount === 0) return null;
+    const detailed = computeDetailedProject(project);
+    if (detailed.validRoomCount === 0) return null;
+    const aggregate = aggregateDetailedProject(project, detailed);
+    return buildDetailedReport({
+      project,
+      loadResult: toReportLoadResult(detailed),
+      aggregate,
+      rooms: project.rooms,
+      floors: project.floors,
+      regions: REGIONS,
+      buildingTypes: BUILDING_TYPES,
+    });
+  }, [project, calc]);
 
   const notify = (text, tone = "info") => setMessage({ text, tone });
   const refreshList = () => setSavedProjects(storageAvailable ? listProjects() : []);
@@ -710,12 +731,24 @@ function HVACCalculatorInner() {
             report={report}
             onDownloadCsv={() => report && downloadCsv(report, `${project.projectName || "hvac-load"}.csv`)}
             onPrint={() => window.print()}
+            onDetailed={() => handleNavigate("detailed")}
             onBack={() => handleNavigate("workspace")}
+          />
+        )}
+
+        {screen === "detailed" && (
+          <DetailedReportScreen
+            project={project}
+            detailedReport={detailedReport}
+            onDownloadCsv={() => detailedReport && downloadDetailedCsv(detailedReport, `${project.projectName || "hvac-load"}-detailed.csv`)}
+            onPrint={() => window.print()}
+            onBack={() => handleNavigate("report")}
           />
         )}
       </main>
 
-      {report && <PrintReport report={report} />}
+      {screen === "report" && report && <PrintReport report={report} />}
+      {screen === "detailed" && detailedReport && <PrintDetailedReport report={detailedReport} />}
     </div>
   );
 }

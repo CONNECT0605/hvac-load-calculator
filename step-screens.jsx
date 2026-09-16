@@ -150,6 +150,7 @@ function RoomsStep({ project, actions, engine }) {
               head={[
                 { label: "室名" },
                 { label: "室用途" },
+                { label: "空調系統" },
                 { label: "床面積 (m²)", align: "right" },
                 { label: "天井高 (m)", align: "right" },
                 { label: "容積 (m³)", align: "right" },
@@ -160,6 +161,14 @@ function RoomsStep({ project, actions, engine }) {
                 <tr key={room.roomId}>
                   <Td><TextInput value={room.name} onChange={(v) => actions.updateRoom(room.roomId, { name: v })} width="w-36" /></Td>
                   <Td><SelectInput value={room.usage ?? ""} onChange={(v) => actions.updateRoom(room.roomId, { usage: v || null })} options={usageOptions} width="w-40" /></Td>
+                  <Td>
+                    <TextInput
+                      value={room.systemId ?? ""}
+                      onChange={(v) => actions.updateRoom(room.roomId, { systemId: v || null })}
+                      width="w-28"
+                      placeholder="系統名"
+                    />
+                  </Td>
                   <Td align="right"><NumberInput value={room.floorArea} onChange={(v) => actions.updateRoom(room.roomId, { floorArea: v })} step={5} width="w-24" /></Td>
                   <Td align="right"><NumberInput value={room.ceilingHeight} onChange={(v) => actions.updateRoom(room.roomId, { ceilingHeight: v })} step={0.1} width="w-20" /></Td>
                   <Td align="right" mono>{num(roomVolume(room))}</Td>
