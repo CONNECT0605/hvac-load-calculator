@@ -65,7 +65,22 @@ STABRO / SeACD との照合結果は `docs/STABRO-COMPATIBILITY-MATRIX.md`。
 
 `core-lock.test.mjs` が2つのハッシュを凍結している。
 - 原単位方式: `827a1d30c7f576b84087492f86d45bb0cfcbaf8d5329591a73c42a60cd869384`
-- R6詳細方式: `35c2890a7b833e9defc198f4df740efbca8ba76f9ca72f3d996d7f12904d1588`
+- R6詳細方式: `c1a8aa169aa4d567b961c6f0e8f624e5d97f91ad28ee7fbff3fb1bfe72355fba`
+
+### 公的基準の負荷項目
+
+`R6_LOAD_ITEMS` は建築設備設計基準 令和6年版 第4編第1章第2節(3)(4)の
+冷房8項目・暖房5項目を原文のまま保持する。**個数・順序を変えてはならない。**
+各項目の `implemented` が `true` でないものは、係数が非公開で実装できない項目である。
+
+出典: https://www.mlit.go.jp/gobuild/content/001390961.pdf (page 14)
+
+### 非公開データについて
+
+建築設備設計基準 令和6年版の**公開PDFは本文30ページのみ**で、係数表・80地区データ・
+材料データ・ETD表は含まれない(公開PDFの全文検索で確認済)。
+STABROの地区データ・材料データは製品内部データで非公開。
+**これらを推測で埋めてはならない。** 詳細は `docs/STABRO-COMPATIBILITY-MATRIX.md` §0-2。
 
 
 ## テスト
