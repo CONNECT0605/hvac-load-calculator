@@ -103,6 +103,77 @@ const R6_LOAD_ITEMS = {
   source: R6_ITEM_SOURCE,
 };
 
+// ============================================================================
+// 【地区データ】地区データ作業ページ相当の外部データ
+//
+// STABRO の「地区データ」タブ(設計用屋外条件 / ガラス面標準日射熱取得 /
+// 太陽高度 / 太陽方位 / 見掛けの太陽高度と方位角 / 実効温度差ETD /
+// 暖房設計用地中温度 / 地中データ)は製品内部データで、公開されていない。
+//
+// そのため本アプリは、正規の基準(建築設備設計基準 令和6年版 本体・同資料)や
+// 製品から取得した数値を setRegionData() で読み込む経路を用意する。
+// ここに値がある項目は「実データ」として計算に使用し、無い項目は
+// 暫定値(provisional)または入力値で補い、notVerified に明示する。
+// ============================================================================
+let REGION_DATA = null;
+
+// setRegionData() に渡すスキーマの例(値は説明用のダミーではなく項目の形を示す)
+const REGION_DATA_SCHEMA_EXAMPLE = {
+  provenance: { source: "取得元の資料名・ページ", confirmedDate: "YYYY-MM-DD" },
+  regions: {
+    "kanto": {
+      city: "東京",
+      coolingDB: null, coolingRH: null, heatingDB: null, heatingNightDB: null,
+      hourlyOutdoorDB: {}, hourlyOutdoorRH: {}, hourlyHeatingOutdoorDB: {}, heatingOutdoorRH: null,
+      solarWm2: {}, externalWm2: {},
+      wallSolarAbsorptionRatio: null, wallSurfaceCoefficientWm2K: null,
+      groundCoolingDB: null, groundHeatingDB: null, groundSolarClock: null,
+      perPersonVentilationM3h: null,
+      unitLeakageM3hPerM2: {}, airChangeRateHeating: { windward: null, other: null },
+    },
+  },
+};
+
+/**
+ * 地区データを設定する。スキーマ:
+ * {
+ *   "provenance": { "source": "建築設備設計基準 令和6年版 同資料 p.xxx", "confirmedDate": "YYYY-MM-DD" },
+ *   "regions": {
+ *     "kanto": {
+ *       "city": "東京",
+ *       "coolingDB": 34.8, "coolingRH": 58.0, "heatingDB": 2.2, "heatingNightDB": -2.0,
+ *       "hourlyOutdoorDB": {"9":31.1,"12":34.8,"14":33.4,"16":31.7},
+ *       "hourlyOutdoorRH": {"9":61,"12":58,"14":60,"16":62},
+ *       "hourlyHeatingOutdoorDB": {...}, "heatingOutdoorRH": 50,
+ *       "solarWm2": {"s":{"9":200,"12":400,"14":450,"16":300}, ...},
+ *       "externalWm2": {"9":120,"12":350,"14":430,"16":260},
+ *       "wallSolarAbsorptionRatio": 0.9, "wallSurfaceCoefficientWm2K": 23.3,
+ *       "groundCoolingDB": 22.0, "groundHeatingDB": 12.0, "groundSolarClock": 0,
+ *       "perPersonVentilationM3h": 30,
+ *       "unitLeakageM3hPerM2": {"a":2.0,"b":1.0,"c":0.5},
+ *       "airChangeRateHeating": {"windward":3.0,"other":1.5}
+ *     }
+ *   }
+ * }
+ */
+function setRegionData(data) {
+  if (data === null || data === undefined) { REGION_DATA = null; return null; }
+  if (typeof data !== "object" || typeof data.regions !== "object" || data.regions === null) {
+    throw new Error("地区データの形式が不正です(regions が必要です)。");
+  }
+  REGION_DATA = data;
+  return REGION_DATA;
+}
+function getRegionData() { return REGION_DATA; }
+function regionDataFor(regionId) {
+  if (!REGION_DATA || !REGION_DATA.regions) return null;
+  return REGION_DATA.regions[regionId] || null;
+}
+/** 地区データの出典表記(無い場合は null)。 */
+function regionDataProvenance() {
+  return REGION_DATA && REGION_DATA.provenance ? REGION_DATA.provenance : null;
+}
+
 // --- 設計用屋外条件(冷房 危険率2.5%) ---
 // 原本未入手のため二次資料経由。冬期(暖房)値・未転記地区は null。
 const R6_DESIGN_OUTDOOR_SOURCE = {
@@ -221,8 +292,19 @@ function computeDetailedLoad(input) {
 
   const hours = Array.isArray(p.hours) && p.hours.length ? p.hours.slice() : DETAILED_HOURS.slice();
   const regionOutdoor = R6_DESIGN_OUTDOOR[p.regionId] || null;
-  if (!regionOutdoor || regionOutdoor.coolingDB === null) {
-    notVerified.push("設計用屋外条件(この地区の値は未転記)");
+  const rd = regionDataFor(p.regionId);
+  const rdProv = regionDataProvenance();
+  const usingRegionData = rd !== null;
+  if (usingRegionData) {
+    defaultedFromR6.push(`地区データ使用(${rd.city || p.regionId})${rdProv && rdProv.source ? `: ${rdProv.source}` : ""}`);
+  }
+  // 冷房設計外気: 入力 > 地区データ > 暫定表
+  const regionCoolingDB = toNum(p.coolingOutdoorDB) ?? (usingRegionData ? toNum(rd.coolingDB) : null) ?? (regionOutdoor ? toNum(regionOutdoor.coolingDB) : null);
+  const regionCoolingRH = toNum(p.coolingOutdoorRH) ?? (usingRegionData ? toNum(rd.coolingRH) : null) ?? (regionOutdoor ? toNum(regionOutdoor.coolingRH) : null);
+  if (regionCoolingDB === null) {
+    notVerified.push("設計用屋外条件(この地区の値は未確認)");
+  } else if (!usingRegionData && toNum(p.coolingOutdoorDB) === null) {
+    notVerified.push("設計用屋外条件(暫定値。地区データの読込または入力が必要)");
   }
 
   // --- 内部発熱(基準値で補完した場合は defaultedFromR6 に記録) ---
@@ -243,6 +325,18 @@ function computeDetailedLoad(input) {
   }
   const occSensibleW = toNum(p.occupantSensibleWPerPerson) ?? R6_INTERNAL_LOAD.occupantSensibleWPerPerson;
   const occLatentW = toNum(p.occupantLatentWPerPerson) ?? R6_INTERNAL_LOAD.occupantLatentWPerPerson;
+
+  // --- その他の室内負荷(項目5)。厨房機器・OA機器等を顕熱/潜熱で指定する ---
+  // 原単位は機器・用途ごとに異なり基準表が非公開のため、設計者が入力した値のみ算入する。
+  const othersList = Array.isArray(p.others) ? p.others : [];
+  const othersSensibleKW = othersList.reduce((s, o) => s + (toNum(o?.sensibleKW) ?? (toNum(o?.sensibleW) !== null ? toNum(o.sensibleW) / 1000 : (toNum(o?.sensibleWm2) !== null ? (area * toNum(o.sensibleWm2)) / 1000 : 0))), 0);
+  const othersLatentKW = othersList.reduce((s, o) => s + (toNum(o?.latentKW) ?? (toNum(o?.latentW) !== null ? toNum(o.latentW) / 1000 : (toNum(o?.latentWm2) !== null ? (area * toNum(o.latentWm2)) / 1000 : 0))), 0);
+  if (othersList.length) {
+    defaultedFromR6.push(`その他の室内負荷 ${othersList.length}件(入力値)`);
+  } else {
+    notVerified.push("その他の室内負荷(厨房機器等。機器・用途別の原単位表が非公開のため入力値が必要)");
+  }
+
   const occSensibleKW = (nOccupants * occSensibleW) / 1000;
   const occLatentKW = (nOccupants * occLatentW) / 1000;
   const lightingKW = (area * lightingWm2) / 1000;
@@ -258,6 +352,16 @@ function computeDetailedLoad(input) {
 
   const uaOf = (w) => { const u = resolveUValue(w); const a = toNum(w.area); return u !== null && a !== null ? u * a : 0; };
   const wallUA = walls.reduce((s, w) => s + uaOf(w), 0);
+  /** 壁面ごとのETD表引き(方位→時刻)。表が無ければnull。 */
+  const etdForWall = (w, hour) => {
+    const direct = toNum(w.etd);
+    if (direct !== null) return direct;
+    if (!etdTable) return null;
+    const orient = w.orientation || "n";
+    const row = etdTable[orient];
+    if (row && typeof row === "object") return toNum(row[String(hour)]);
+    return null;
+  };
   if (walls.some((w) => resolveUValue(w) === null)) notVerified.push("外壁の熱貫流率U値(未入力の面があります)");
   const winUASum = windows.reduce((s, w) => s + uaOf(w), 0);
   if (windows.some((w) => resolveUValue(w) === null)) notVerified.push("窓の熱貫流率U値(未入力の面があります)");
@@ -266,14 +370,47 @@ function computeDetailedLoad(input) {
   const floorUA = floorEnv ? uaOf(floorEnv) : 0;
   if (floorEnv && resolveUValue(floorEnv) === null) notVerified.push("床の熱貫流率U値");
   if (!floorEnv) notVerified.push("床の熱貫流率U値・暖房設計用地中温度");
-  if (floorEnv && toNum(p.groundTemperature) === null) {
-    notVerified.push("暖房設計用地中温度(未転記。床は冷房・暖房とも寄与0として計算しています)");
-  }
   const interiorUA = interiorWalls.reduce((s, w) => s + uaOf(w), 0);
 
   // --- 日射(ガラス面標準日射熱取得は地区データ。未転記のため入力値を使用) ---
-  const solarWm2 = p.solarWm2 && typeof p.solarWm2 === "object" ? p.solarWm2 : null;
-  if (!solarWm2) notVerified.push("ガラス面標準日射熱取得(地区データ。時刻・方位別日射量が未転記)");
+  const solarWm2 = (p.solarWm2 && typeof p.solarWm2 === "object" ? p.solarWm2 : null)
+    ?? (usingRegionData && rd.solarWm2 && typeof rd.solarWm2 === "object" ? rd.solarWm2 : null);
+  if (!solarWm2) notVerified.push("ガラス面標準日射熱取得(地区データ未読込。時刻・方位別日射量が未入力)");
+  else if (usingRegionData && rd.solarWm2) defaultedFromR6.push("ガラス面標準日射熱取得(地区データ)");
+
+  // --- 外壁日射(勾配裏面を含む壁面日射) ---
+  const externalWm2 = (p.externalWm2 && typeof p.externalWm2 === "object" ? p.externalWm2 : null)
+    ?? (usingRegionData && rd.externalWm2 && typeof rd.externalWm2 === "object" ? rd.externalWm2 : null);
+  const wallsWithAbsorption = walls.filter((w) => toNum(w.solarAbsorptionRatio) !== null);
+  const wallExternalAreaM2 = toNum(p.wallExternalAreaM2) ?? walls.reduce((s, w) => s + (toNum(w.area) ?? 0), 0);
+  const wallAbsorptionRatio = toNum(p.wallSolarAbsorptionRatio) ?? (usingRegionData ? toNum(rd.wallSolarAbsorptionRatio) : null)
+    ?? (wallsWithAbsorption.length ? toNum(wallsWithAbsorption[0].solarAbsorptionRatio) : null);
+  const wallHeatTransferCoeff = toNum(p.wallSurfaceCoefficientWm2K) ?? (usingRegionData ? toNum(rd.wallSurfaceCoefficientWm2K) : null);
+  if (externalWm2 === null && wallAbsorptionRatio !== null) notVerified.push("外壁日射負荷(壁面日射量が未入力)");
+  if (externalWm2 !== null && (wallAbsorptionRatio === null || wallHeatTransferCoeff === null)) {
+    notVerified.push("外壁日射負荷(日射吸収率または表面熱伝達率が未入力)");
+  }
+
+  // --- 排水からの負荷(配管表面等) ---
+  const drainageWm2 = toNum(p.drainageWm2);
+  const drainageLoadKW = drainageWm2 === null ? 0 : (toNum(p.drainageAreaM2) ?? area) * drainageWm2 / 1000;
+  if (drainageWm2 === null && p.hasDrainageHeatSource === true) notVerified.push("排水からの負荷(排水量・水温が未入力)");
+
+  // --- ETD(実効温度差) ---
+  // 地区データのETD表、または壁ごとのETDが与えられれば、それを実効温度差として使う。
+  // 与えられていない場合は、定義式のうちデータが揃う項のみ(ΔT と α·I/hi)を算定する。
+  const rdEtd = usingRegionData && rd.etd && typeof rd.etd === "object" ? rd.etd : null;
+  const etdTable = (p.etd && typeof p.etd === "object" ? p.etd : null) ?? rdEtd;
+  if (etdTable) defaultedFromR6.push("実効温度差ETD(表の値)");
+
+  // --- 地中(床・地盤) ---
+  const groundCoolingDBC = toNum(p.groundCoolingDB) ?? (usingRegionData ? toNum(rd.groundCoolingDB) : null) ?? toNum(p.groundTemperature);
+  const groundHeatingDBC = toNum(p.groundHeatingDB) ?? (usingRegionData ? toNum(rd.groundHeatingDB) : null) ?? toNum(p.groundTemperature);
+  const groundSolarClock = toNum(p.groundSolarClock) ?? (usingRegionData ? toNum(rd.groundSolarClock) : null);
+  const groundAreaM2 = toNum(p.groundAreaM2) ?? (floorEnv ? toNum(floorEnv.area) : null);
+  if (floorEnv && (groundCoolingDBC === null || groundHeatingDBC === null)) {
+    notVerified.push("設計用地中温度(冷房または暖房。未入力のため床・地盤は寄与0として計算しています)");
+  }
 
   // --- 外気・換気・すきま風 ---
   const heatRecovery = p.heatRecovery || {};
@@ -282,10 +419,15 @@ function computeDetailedLoad(input) {
     ? Math.max(0, Math.min(1, recoveryEfficiencyInput / 100)) : 0;
   if (heatRecovery.enabled === true && recoveryEff === 0) notVerified.push("熱交換効率");
 
+  // 外気量の一人当たり基準値。地区データ/社内基準で差し替え可能(未指定は基準値)。
+  const perPersonVent = toNum(p.perPersonVentilationM3h) ?? (usingRegionData ? toNum(rd.perPersonVentilationM3h) : null) ?? R6_INTERNAL_LOAD.ventilationM3hPerPerson;
   let outdoorAirVolumeM3h = toNum(p.outdoorAirVolumeM3h);
   if (outdoorAirVolumeM3h === null) {
-    outdoorAirVolumeM3h = nOccupants * R6_INTERNAL_LOAD.ventilationM3hPerPerson;
-    if (nOccupants > 0) defaultedFromR6.push(`外気量 ${R6_INTERNAL_LOAD.ventilationM3hPerPerson}m³/(h・人)(基準値)×${nOccupants}人`);
+    outdoorAirVolumeM3h = nOccupants * perPersonVent;
+    if (nOccupants > 0) {
+      const label = toNum(p.perPersonVentilationM3h) === null ? "(基準値)" : "(指定値)";
+      defaultedFromR6.push(`外気量 ${perPersonVent}m³/(h・人)${label}×${nOccupants}人`);
+    }
   }
 
   if (interiorWalls.length && toNum(p.interiorDeltaTK) === null) notVerified.push("内壁の温度差(未入力。内壁負荷は0として計算しています)");
@@ -300,63 +442,134 @@ function computeDetailedLoad(input) {
   if (inf.method === "air_change" && explicitAirChangeCooling === null) {
     defaultedFromR6.push(`すきま風 換気回数 夏期${isWindward ? 2 : 1}回(基準値)`);
   }
-  const infAirChangeHeating = toNum(inf.airChangeRateHeating);
+  const rdAirChangeHeating = usingRegionData && rd.airChangeRateHeating && typeof rd.airChangeRateHeating === "object" ? rd.airChangeRateHeating : null;
+  const infAirChangeHeating = toNum(inf.airChangeRateHeating)
+    ?? (rdAirChangeHeating ? (isWindward ? toNum(rdAirChangeHeating.windward) : toNum(rdAirChangeHeating.other)) : null);
   if (inf.method === "air_change" && infAirChangeHeating === null) {
-    notVerified.push("すきま風 冬期換気回数(基準は3〜4回/1〜2回の範囲で、単一値を特定できないため要入力)");
+    notVerified.push("すきま風 冬期換気回数(基準は3〜4回/1〜2回の範囲で単一値を特定できないため要入力)");
+  } else if (inf.method === "air_change" && toNum(inf.airChangeRateHeating) === null && infAirChangeHeating !== null) {
+    defaultedFromR6.push(`すきま風 冬期換気回数 ${infAirChangeHeating}回(地区データ)`);
   }
-  const unitLeakage = toNum(inf.unitLeakageM3hPerM2);
-  const windowAreaTotal = windows.reduce((s, w) => s + (toNum(w.area) ?? 0), 0);
-  const infiltrationConfigured = inf.method !== undefined && inf.method !== null && inf.method !== "";
-  if (infiltrationConfigured && unitLeakage === null) {
-    notVerified.push("単位すきま風量(サッシ気密性区分別の表が未転記)");
+  // 単位すきま風量法: サッシ気密性区分別の単位すきま風量[m³/(h·m²)]を
+  // 窓ごと(または一律)に与えれば成立する。表の数値は製品/基準に由来する入力値。
+  const rdUnitLeakage = usingRegionData && rd.unitLeakageM3hPerM2 && typeof rd.unitLeakageM3hPerM2 === "object" ? rd.unitLeakageM3hPerM2 : null;
+  const unitLeakage = toNum(inf.unitLeakageM3hPerM2)
+    ?? (rdUnitLeakage ? toNum(rdUnitLeakage[inf.sealClass || inf.airTightnessClass]) : null);
+  const leakageVolumeM3h = windows.reduce((s, w) => {
+    const a = toNum(w.area);
+    if (a === null) return s;
+    const perM2 = toNum(w.unitLeakageM3hPerM2) ?? unitLeakage;
+    return s + (perM2 === null ? 0 : a * perM2);
+  }, 0);
+  const infiltrationMethod = inf.method === undefined || inf.method === null ? "" : inf.method;
+  const infiltrationConfigured = infiltrationMethod !== "";
+  if (infiltrationConfigured && infiltrationMethod === "unit_leakage" && leakageVolumeM3h === 0) {
+    notVerified.push("単位すきま風量(サッシ気密性区分別。地区データの表または窓ごとの値が必要)");
+  } else if (infiltrationConfigured && infiltrationMethod === "unit_leakage" && leakageVolumeM3h > 0 && toNum(inf.unitLeakageM3hPerM2) === null) {
+    defaultedFromR6.push("単位すきま風量(サッシ気密性区分別表)");
   }
 
   // 時刻別外気温度・湿度(地区データ。未転記のため入力値。無い場合は代表値で全時刻一定)
-  const hourlyOutdoor = p.hourlyOutdoorDB && typeof p.hourlyOutdoorDB === "object" ? p.hourlyOutdoorDB : null;
-  if (!hourlyOutdoor) notVerified.push("時刻別外気温度(地区データ。代表値で全時刻一定として計算)");
-  const hourlyOutdoorRH = p.hourlyOutdoorRH && typeof p.hourlyOutdoorRH === "object" ? p.hourlyOutdoorRH : null;
-  const heatingOutdoorDB = toNum(p.heatingOutdoorDB) ?? (regionOutdoor ? toNum(regionOutdoor.heatingDB) : null);
-  if (heatingOutdoorDB === null) notVerified.push("暖房用 設計外気温度(冬期。未転記のため暖房負荷を確定できません)");
+  const hourlyOutdoor = (p.hourlyOutdoorDB && typeof p.hourlyOutdoorDB === "object" ? p.hourlyOutdoorDB : null)
+    ?? (usingRegionData && rd.hourlyOutdoorDB && typeof rd.hourlyOutdoorDB === "object" ? rd.hourlyOutdoorDB : null);
+  if (!hourlyOutdoor) notVerified.push("時刻別外気温度(地区データ未読込。代表値で全時刻一定として計算)");
+  else if (usingRegionData && rd.hourlyOutdoorDB) defaultedFromR6.push("時刻別外気温度(地区データ)");
+  const hourlyOutdoorRH = (p.hourlyOutdoorRH && typeof p.hourlyOutdoorRH === "object" ? p.hourlyOutdoorRH : null)
+    ?? (usingRegionData && rd.hourlyOutdoorRH && typeof rd.hourlyOutdoorRH === "object" ? rd.hourlyOutdoorRH : null);
+  const heatingOutdoorDB = toNum(p.heatingOutdoorDB) ?? (usingRegionData ? toNum(rd.heatingDB) : null) ?? (regionOutdoor ? toNum(regionOutdoor.heatingDB) : null);
+  if (heatingOutdoorDB === null) notVerified.push("暖房用 設計外気温度(冬期。値が未確認のため暖房負荷を確定できません)");
 
   const xInCooling = humidityRatioKgPerKg(tinCooling, rhInCooling);
   const xInHeating = humidityRatioKgPerKg(tinHeating, rhInHeating);
 
+  const hourlyHeating = p.hourlyHeatingOutdoorDB && typeof p.hourlyHeatingOutdoorDB === "object" ? p.hourlyHeatingOutdoorDB : null;
+  const hourlyHeatingRH = p.hourlyHeatingOutdoorRH && typeof p.hourlyHeatingOutdoorRH === "object" ? p.hourlyHeatingOutdoorRH : null;
+  const hum = p.humidification && typeof p.humidification === "object" ? p.humidification : null;
+  const sysLoss = p.systemLoss && typeof p.systemLoss === "object" ? p.systemLoss : null;
+  if (sysLoss === null) notVerified.push("ダクト・配管表面/空気漏洩/送風機・ポンプ/間欠空調による蓄熱負荷(項目8。仕様値の入力が必要)");
+  if (hum === null && toNum(p.humidificationKgH) === null) notVerified.push("加湿量(冬期。加湿の有無・外気湿度の入力が必要)");
+  else defaultedFromR6.push("ダクト・配管・空気漏洩・送風機・ポンプ・蓄熱負荷(入力値)");
+
+  // 加湿の有無と加湿対象風量は時刻に依存しないため、ループの外で決める
+  const humidificationRequested = hum?.enabled === true || toNum(p.humidificationKgH) !== null;
+  const humidificationVolumeM3h = toNum(p.humidificationVolumeM3h) ?? (outdoorAirVolumeM3h + (leakageVolumeM3h || 0));
+
   const hourlyResults = hours.map((hour) => {
     const hKey = String(hour);
-    const toutCooling = (hourlyOutdoor ? toNum(hourlyOutdoor[hKey]) : null) ?? (regionOutdoor ? toNum(regionOutdoor.coolingDB) : null);
-    const rhOut = (hourlyOutdoorRH ? toNum(hourlyOutdoorRH[hKey]) : null) ?? (regionOutdoor ? toNum(regionOutdoor.coolingRH) : null);
+    const extKey = String(hour);
+    const heatingDBHour = (hourlyHeating ? toNum(hourlyHeating[hKey]) : null) ?? heatingOutdoorDB;
+    const toutCooling = (hourlyOutdoor ? toNum(hourlyOutdoor[hKey]) : null) ?? regionCoolingDB;
+    const rhOut = (hourlyOutdoorRH ? toNum(hourlyOutdoorRH[hKey]) : null) ?? regionCoolingRH;
     const xOut = humidityRatioKgPerKg(toutCooling, rhOut);
 
     // 冷房(貫流 + 日射 + 内部発熱 + 外気 + すきま風)
     const dTCoolingOut = toutCooling === null ? 0 : toutCooling - tinCooling;
     const dTCoolingGround = 0; // 地中温度が未転記のため床は寄与0(notVerifiedに記載)
-    const envCooling = conductionKW(wallUA, 1, dTCoolingOut) + conductionKW(roofUA, 1, dTCoolingOut) + conductionKW(floorUA, 1, dTCoolingGround);
+    // 構造体負荷: 壁はETD(表または定義式)、屋根・床は外気温度差
+    const wallCoolingETD = walls.reduce((acc, w) => {
+      const u = resolveUValue(w); const a = toNum(w.area);
+      if (u === null || a === null) return acc;
+      const etd = etdForWall(w, hour);
+      const eff = etd !== null ? etd
+        : (dTCoolingOut + ((toNum(w.solarAbsorptionRatio) ?? wallAbsorptionRatio) !== null && externalWm2 && externalWm2[extKey] !== undefined && wallHeatTransferCoeff !== null
+          ? ((toNum(w.solarAbsorptionRatio) ?? wallAbsorptionRatio) * (toNum(externalWm2[extKey]) ?? 0)) / wallHeatTransferCoeff : 0));
+      return acc + conductionKW(u * a, 1, eff);
+    }, 0);
+    const roofFloorCooling = conductionKW(roofUA, 1, dTCoolingOut) + conductionKW(floorUA, 1, dTCoolingGround);
+    const envCooling = wallCoolingETD + roofFloorCooling;
     const winCooling = conductionKW(winUASum, 1, dTCoolingOut);
     const interiorCooling = conductionKW(interiorUA, 1, interiorDeltaTK);
     const winSolarKW = windows.reduce((s, w) => {
       const orient = w.orientation || "s";
       const irr = solarWm2 && solarWm2[orient] ? toNum(solarWm2[orient][hKey]) : null;
-      return s + solarKW(toNum(w.scValue), irr, toNum(w.area));
+      // 庇・ルーバーの日射遮蔽率(設計条件)をSCへ乗じる(値は設計者入力)
+      const shade = toNum(w.shadeRatio) ?? toNum(w.louverShadeRatio) ?? toNum(w.overhangShadeRatio);
+      const effSC = toNum(w.scValue) === null ? null : toNum(w.scValue) * (shade === null ? 1 : (1 - Math.max(0, Math.min(1, shade))));
+      return s + solarKW(effSC, irr, toNum(w.area));
     }, 0);
     const oaSensibleCooling = airSensibleKW(outdoorAirVolumeM3h, dTCoolingOut) * (1 - recoveryEff);
     const oaLatentCooling = xOut === null ? 0 : airLatentKW(outdoorAirVolumeM3h, xOut - xInCooling) * (1 - recoveryEff);
     const infVolumeCooling = roomVolumeM3 !== null && infAirChangeCooling !== null ? roomVolumeM3 * infAirChangeCooling : 0;
-    const infWindowCooling = Number.isFinite(unitLeakage) ? windowAreaTotal * unitLeakage : 0;
+    const infWindowCooling = leakageVolumeM3h;
     const infVolumeCoolingTotal = infVolumeCooling + infWindowCooling;
     const infSensibleCooling = airSensibleKW(infVolumeCoolingTotal, dTCoolingOut);
     const infLatentCooling = xOut === null ? 0 : airLatentKW(infVolumeCoolingTotal, xOut - xInCooling);
 
-    const coolingSensibleKW = envCooling + winCooling + interiorCooling + winSolarKW + lightingKW + equipmentKW + occSensibleKW + oaSensibleCooling + infSensibleCooling;
-    const coolingLatentKW = occLatentKW + oaLatentCooling + infLatentCooling;
+    // 外壁日射(勾配裏面を含む)。ETDに日射項を含めた場合は二重計上を避けるため0とする。
+    const etdIncludesSolar = etdTable !== null || walls.some((w) => toNum(w.etd) !== null)
+      || (wallAbsorptionRatio !== null && wallHeatTransferCoeff !== null && externalWm2 !== null);
+    const extSolar = (!etdIncludesSolar && externalWm2 !== null && wallAbsorptionRatio !== null && wallHeatTransferCoeff !== null && externalWm2[extKey] !== undefined)
+      ? wallExternalAreaM2 * wallAbsorptionRatio * wallHeatTransferCoeff * (toNum(externalWm2[extKey]) ?? 0) / 1000
+      : 0;
+    // 地中(床・地盤)
+    const groundLoadCooling = groundCoolingDBC === null ? 0 : conductionKW(floorUA, 1, groundCoolingDBC - tinCooling);
+    const groundSolarLoad = groundSolarClock === null ? 0 : (groundAreaM2 ?? 0) * groundSolarClock / 1000;
+
+    // ダクト・配管・空気漏洩・送風機・ポンプ・蓄熱(項目8)。指定値のみ算入。
+    const systemLossKW = sysLoss === null ? null
+      : (toNum(sysLoss.fanKW) ?? 0) + (toNum(sysLoss.ductSurfaceKW) ?? 0)
+        + (toNum(sysLoss.airLeakageKW) ?? 0) + (toNum(sysLoss.thermalStorageKW) ?? 0);
+
+    // 加湿量(冬期。室内絶対湿度まで加湿するための負荷)。仕様がある場合のみ算入。
+    const rhHeatingOut = (hourlyHeatingRH ? toNum(hourlyHeatingRH[hKey]) : null) ?? toNum(p.heatingOutdoorRH);
+    const xOutHeating = heatingDBHour === null ? null : humidityRatioKgPerKg(heatingDBHour, rhHeatingOut);
+    const humidificationLatentKW = (humidificationRequested && xOutHeating !== null)
+      ? airLatentKW(humidificationVolumeM3h, Math.max(0, xInHeating - xOutHeating))
+      : 0;
+    if (humidificationRequested && xOutHeating === null) notVerified.push("加湿量(冬期の外気絶対湿度が未入力)");
+
+    const coolingSensibleKW = envCooling + winCooling + interiorCooling + winSolarKW + lightingKW + equipmentKW + occSensibleKW + oaSensibleCooling + infSensibleCooling
+      + extSolar + drainageLoadKW + groundLoadCooling + groundSolarLoad + (systemLossKW ?? 0) + othersSensibleKW;
+    const coolingLatentKW = occLatentKW + oaLatentCooling + infLatentCooling + othersLatentKW;
     const coolingTotalKW = coolingSensibleKW + coolingLatentKW;
 
     // 暖房(貫流 + 外気顕熱 + すきま風顕熱。日射・内部発熱は安全側で見込まない)
     let heatingTotalKW = null;
     let heatingComponents = null;
-    if (heatingOutdoorDB !== null) {
-      const dTHeating = tinHeating - heatingOutdoorDB;
-      const dTHeatingGround = 0; // 暖房設計用地中温度が未転記のため床は寄与0
-      const envHeating = conductionKW(wallUA, 1, dTHeating) + conductionKW(roofUA, 1, dTHeating) + conductionKW(floorUA, 1, dTHeatingGround);
+    if (heatingDBHour !== null) {
+      const dTHeating = tinHeating - heatingDBHour;
+      const dTHeatingGroundOff = groundHeatingDBC === null ? 0 : tinHeating - groundHeatingDBC;
+      const envHeating = conductionKW(wallUA, 1, dTHeating) + conductionKW(roofUA, 1, dTHeating) + conductionKW(floorUA, 1, dTHeatingGroundOff);
       const winHeating = conductionKW(winUASum, 1, dTHeating);
       const interiorHeating = conductionKW(interiorUA, 1, interiorDeltaTK);
       const oaSensibleHeating = airSensibleKW(outdoorAirVolumeM3h, dTHeating) * (1 - recoveryEff);
@@ -369,14 +582,19 @@ function computeDetailedLoad(input) {
         interiorWallKW: interiorHeating,
         outdoorAirSensibleKW: oaSensibleHeating,
         infiltrationSensibleKW: infSensibleHeating,
+        drainageKW: drainageLoadKW,
+        systemLossKW: systemLossKW ?? 0,
+        humidificationKW: humidificationLatentKW,
       };
-      heatingTotalKW = envHeating + winHeating + interiorHeating + oaSensibleHeating + infSensibleHeating;
+      heatingTotalKW = envHeating + winHeating + interiorHeating + oaSensibleHeating + infSensibleHeating
+        + drainageLoadKW + (systemLossKW ?? 0) + humidificationLatentKW;
     }
 
     return {
       hour,
       outdoorDB: toutCooling,
       outdoorRH: rhOut,
+      heatingOutdoorDB: heatingDBHour,
       components: {
         envelopeKW: envCooling,
         windowConductionKW: winCooling,
@@ -390,6 +608,12 @@ function computeDetailedLoad(input) {
         outdoorAirLatentKW: oaLatentCooling,
         infiltrationSensibleKW: infSensibleCooling,
         infiltrationLatentKW: infLatentCooling,
+        othersSensibleKW,
+        othersLatentKW,
+        exteriorSolarKW: extSolar,
+        drainageKW: drainageLoadKW,
+        groundKW: groundLoadCooling + groundSolarLoad,
+        systemLossKW: systemLossKW ?? 0,
       },
       infiltrationVolumeM3h: infVolumeCoolingTotal,
       coolingSensibleKW,
@@ -438,6 +662,41 @@ function computeDetailedLoad(input) {
     heatingBreakdown: peakHeating ? peakHeating.heatingComponents : null,
     ventilationM3h: outdoorAirVolumeM3h,
     infiltrationVolumeM3h: peakCooling.infiltrationVolumeM3h,
+      // 帳票の設計条件欄に出す「算定に用いた入力値」の写し(再計算はしない)
+    areasEcho: {
+      wallAreaM2: walls.reduce((a, w) => a + (toNum(w.area) ?? 0), 0),
+      windowAreaM2: windows.reduce((a, w) => a + (toNum(w.area) ?? 0), 0),
+      interiorWallAreaM2: interiorWalls.reduce((a, w) => a + (toNum(w.area) ?? 0), 0),
+      roofAreaM2: roof ? toNum(roof.area) : null,
+      floorAreaM2: floorEnv ? toNum(floorEnv.area) : null,
+      groundTemperatureC: groundCoolingDBC,
+      windowUValue: windows.length ? toNum(windows[0].uValue) : null,
+      windowScValue: windows.length ? toNum(windows[0].scValue) : null,
+      windowShadeRatio: windows.length ? toNum(windows[0].shadeRatio) : null,
+    },
+    conditionsEcho: {
+      coolingSetTempC: tinCooling, heatingSetTempC: tinHeating,
+      indoorRHCooling: rhInCooling, indoorRHHeating: rhInHeating,
+      usage,
+      lightingWm2, equipmentWm2,
+      occupantSensibleWPerPerson: occSensibleW, occupantLatentWPerPerson: occLatentW,
+      occupants: nOccupants,
+      othersCount: othersList.length,
+      outdoorAirVolumeM3h,
+      perPersonVentilationM3h: perPersonVent,
+      heatRecoveryEnabled: heatRecovery.enabled === true,
+      recoveryEfficiencyPct: recoveryEfficiencyInput,
+      infiltrationMethod: inf.method ?? null,
+      windwardSide: inf.windwardSide === true,
+      airChangeRateCooling: infAirChangeCooling,
+      airChangeRateHeating: infAirChangeHeating,
+      unitLeakageM3hPerM2: unitLeakage,
+      humidification: humidificationRequested,
+      systemLoss: sysLoss ? { ...sysLoss } : null,
+      regionCoolingDB,
+      regionCoolingRH,
+      heatingOutdoorDB,
+    },
     designLoadCoolingKW,
     designLoadHeatingKW,
     basis,
@@ -957,6 +1216,8 @@ module.exports = {
   computeDetailedLoad,
   R6_INTERNAL_LOAD, R6_DESIGN_OUTDOOR, AIR_PROPERTIES, DETAILED_HOURS, R6_LOAD_ITEMS,
   SURFACE_RESISTANCE, uValueFromMaterials,
+  // 【地区データ】地区データ作業ページ相当(外部データの読込)
+  setRegionData, getRegionData, REGION_DATA_SCHEMA_EXAMPLE,
   // 新モデルRoom → R6詳細方式入力への翻訳(project-model.mjs と1対1)
   roomToDetailedLoadInput, computeRoomDetailedLoad,
 };

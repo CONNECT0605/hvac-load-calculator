@@ -65,7 +65,21 @@ STABRO / SeACD との照合結果は `docs/STABRO-COMPATIBILITY-MATRIX.md`。
 
 `core-lock.test.mjs` が2つのハッシュを凍結している。
 - 原単位方式: `827a1d30c7f576b84087492f86d45bb0cfcbaf8d5329591a73c42a60cd869384`
-- R6詳細方式: `c1a8aa169aa4d567b961c6f0e8f624e5d97f91ad28ee7fbff3fb1bfe72355fba`
+- R6詳細方式: `627d1e9933e6dac1324718a4421dbb3d067ea5aca2e5f674ebd5c3320e434bcb`
+
+### エンジンのブラウザへの読み込み(重要)
+
+`hvac-calc-engine.js` は Node の CommonJS(`module.exports`)である。UI側も
+`import ENGINE_MODULE from "./hvac-calc-engine.js"` でこの正本を直接読み、
+SHARED-LOGIC の写しではなく**同じ実装**を使う。このため `vite.config.mjs` の
+`build.commonjsOptions.include` に engine を含めている。
+
+ここを外すと、SHARED-LOGIC の外側にある詳細方式(`computeDetailedLoad` 等)が
+バンドルから欠落し、`undefined` 呼び出しでレポート画面が白画面になる。
+**engine を ESM へ書き換えてはならない**(COREの再実装になるため)。
+詳細方式の結果は原単位方式とキーが異なる(`peak` の有無、集計は
+`byRoom` だけ `coolingKW`)ので、UIからは必ずアダプタ経由で参照する。
+
 
 ### 公的基準の負荷項目
 
@@ -89,7 +103,7 @@ STABROの地区データ・材料データは製品内部データで非公開�
 npm test          # unit/integration(engine, core-lock, csv, storage, validation, model, weather)
 npm run check:sync # engine と SHARED-LOGIC の一致確認
 npm run build
-npm run test:e2e  # Playwright 実ブラウザ 42ケース
+npm run test:e2e  # Playwright 実ブラウザ 46ケース
 ```
 
 E2E は `e2e/` にあり、`vite preview` を自動起動する。

@@ -82,7 +82,18 @@ check(run({ heatRecovery: { enabled: true, efficiency: 70 } }).peak.coolingKW < 
 const rInf = run({ infiltration: { method: "air_change", windwardSide: true } });
 check(peakOf(rInf).components.infiltrationSensibleKW > 0, "すきま風条件(換気回数法)を入れるとすきま風負荷が発生する");
 check(rInf.infiltrationVolumeM3h > 0, "すきま風量が算出される(室容積×換気回数)");
-check(rInf.notVerified.some((s) => s.includes("単位すきま風量")), "単位すきま風量表が未転記である旨が明示される");
+check(rInf.notVerified.some((s) => s.includes("単位すきま風量")) === false, "換気回数法のときは単位すきま風量の警告を出さない(方式が異なる)");
+// 単位すきま風量法: サッシ気密性区分別の値(地区データ/入力)があれば成立する
+const rUnitInput = run({ windows: [{ area: 20, orientation: "s", uValue: 5.8, unitLeakageM3hPerM2: 1.5 }], infiltration: { method: "unit_leakage" } });
+check(Math.abs(rUnitInput.infiltrationVolumeM3h - 30) < 1e-9, "単位すきま風量法(窓別の値): 窓面積×単位すきま風量で成立する");
+check(rUnitInput.defaultedFromR6.some((s) => s.includes("単位すきま風量")), "単位すきま風量の値がある場合は「適用した」と記録する(警告しない)");
+const rUnitNone = run({ windows: [{ area: 20, orientation: "s", uValue: 5.8 }], infiltration: { method: "unit_leakage" } });
+check(rUnitNone.notVerified.some((s) => s.includes("単位すきま風量")), "単位すきま風量の値が無い場合は警告する");
+// 地区データのサッシ気密性区分別表を読み込めば成立する
+e.setRegionData({ provenance: { source: "test" }, regions: { kanto: { city: "東京", unitLeakageM3hPerM2: { a: 2.0 } } } });
+const rUnitTable = run({ windows: [{ area: 20, orientation: "s", uValue: 5.8 }], infiltration: { method: "unit_leakage", sealClass: "a" } });
+check(Math.abs(rUnitTable.infiltrationVolumeM3h - 40) < 1e-9, "単位すきま風量法(地区データの区分表): 表の値で成立する");
+e.setRegionData(null);
 check(run({ infiltration: { method: "air_change", windwardSide: false } }).infiltrationVolumeM3h < rInf.infiltrationVolumeM3h, "風下側は風上側よりすきま風量が少ない(基準の区分)");
 
 // 7. 地区
@@ -149,7 +160,7 @@ const rOthers = run({ others: [{ name: "厨房機器", sensibleKW: 5, latentKW: 
 check(Array.isArray(rOthers.notVerified) && !rOthers.notVerified.some((x) => x.includes("その他")), "その他内部発熱は未確認事項として扱われる(値の発明をしない)");
 
 // 15. 暖房の内訳と負荷項目リスト
-check(rHeat.heatingBreakdown !== null && Object.keys(rHeat.heatingBreakdown).length === 5, "暖房の内訳5項目が算出される(構造体・ガラス面・すきま風・外気)");
+check(rHeat.heatingBreakdown !== null && Object.keys(rHeat.heatingBreakdown).length === 8, "暖房の内訳8項目が算出される(構造体・ガラス面・内壁・すきま風・外気・排水・システム損失・加湿)");
 check(close(Object.values(rHeat.heatingBreakdown).reduce((a, b) => a + b, 0), rHeat.peak.heatingKW, 1e-9), "暖房内訳の合計=暖房ピーク負荷");
 check(r0.loadItems.cooling.length === 8 && r0.loadItems.heating.length === 5, "公的基準の負荷項目数(冷房8・暖房5)を結果に保持");
 check(r0.loadItems.source.url.includes("mlit.go.jp"), "負荷項目の出典が国交省公式PDFを指す");

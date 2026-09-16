@@ -137,7 +137,14 @@ export function createRoom(r = {}) {
 }
 
 export function createWall(w = {}) {
-  return { area: w.area ?? null, orientation: w.orientation ?? "n", uValue: w.uValue ?? null };
+  return {
+    area: w.area ?? null,
+    orientation: w.orientation ?? "n",
+    uValue: w.uValue ?? null,
+    // 材料構成(厚さ・熱伝導率)からU値を算定する場合に使用
+    materials: Array.isArray(w.materials) ? w.materials.map((m) => ({ name: m.name ?? "", thicknessMm: m.thicknessMm ?? null, conductivityWmK: m.conductivityWmK ?? null })) : [],
+    solarAbsorptionRatio: w.solarAbsorptionRatio ?? null,
+  };
 }
 
 export function createWindow(w = {}) {
@@ -148,6 +155,10 @@ export function createWindow(w = {}) {
     uValue: w.uValue ?? null,
     scValue: w.scValue ?? null,
     shading: w.shading ?? "",
+    // 庇・ルーバー等の日射遮蔽率(0〜1)。設計条件として入力する。
+    shadeRatio: w.shadeRatio ?? null,
+    // サッシ気密性区分別の単位すきま風量[m³/(h·m²)]
+    unitLeakageM3hPerM2: w.unitLeakageM3hPerM2 ?? null,
   };
 }
 

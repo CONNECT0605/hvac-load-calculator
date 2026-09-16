@@ -145,6 +145,9 @@ export function buildDetailedReport({ project, loadResult, aggregate, roomResult
     ],
     // 係数と出典
     coefficientSources: sourceRows,
+    // 帳票の設計条件欄が参照する、算定に用いた入力値の写し
+    conditionsEcho: loadResult.conditionsEcho || null,
+    areasEcho: loadResult.areasEcho || null,
     // 基準値で補完した項目
     defaultedFromR6,
     // 未確認事項(隠さない)

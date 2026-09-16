@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
-    "test": "node hvac-calc-engine.test.js && node core-lock.test.mjs && node export-csv.test.mjs && node project-storage.test.mjs && node ui-validation.test.mjs && node project-model.test.mjs && node weather.test.mjs && node stabro-compat.test.mjs && node stabro-aggregation.test.mjs && node stabro-report.test.mjs",
+    "test": "node hvac-calc-engine.test.js && node core-lock.test.mjs && node export-csv.test.mjs && node project-storage.test.mjs && node ui-validation.test.mjs && node project-model.test.mjs && node weather.test.mjs && node stabro-compat.test.mjs && node stabro-aggregation.test.mjs && node stabro-report.test.mjs && node stabro-56.test.mjs && node stabro-docs.test.mjs",
     "test:e2e": "playwright test",
     "check:sync": "node hvac-calc-engine.sync-check.js"
   },

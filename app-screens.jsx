@@ -362,7 +362,7 @@ export function ProjectListScreen({ savedProjects, currentProjectId, onOpenProje
   );
 }
 
-export function ReportScreen({ project, calc, report, onDownloadCsv, onPrint, onBack }) {
+export function ReportScreen({ project, calc, report, detailedWorkbook, onDownloadCsv, onDownloadTsv, onPrint, onBack }) {
   if (!calc || calc.totals.validRoomCount === 0 || !report) {
     return (
       <Panel title="レポート" tone="accent">
@@ -389,6 +389,7 @@ export function ReportScreen({ project, calc, report, onDownloadCsv, onPrint, on
           <>
             <Button size="sm" onClick={onBack}>入力に戻る</Button>
             <Button size="sm" onClick={onDownloadCsv}>CSV出力</Button>
+            {onDownloadTsv && <Button size="sm" onClick={onDownloadTsv} disabled={!detailedWorkbook}>帳票(TSV/Excel)</Button>}
             <Button size="sm" variant="primary" onClick={onPrint}>印刷 / PDF</Button>
           </>
         }
@@ -409,6 +410,31 @@ export function ReportScreen({ project, calc, report, onDownloadCsv, onPrint, on
       {section("計算根拠", report.basis)}
       {section("計算結果(建物全体)", report.results)}
       {section("機器選定", report.equipment)}
+      {detailedWorkbook && (
+        <Panel
+          title="R6詳細方式 帳票(18帳票)"
+          subtitle="建築設備設計基準 令和6年版に基づく詳細方式(積み上げ)。帳票(TSV/Excel)で全帳票を出力できます。"
+        >
+          <div className="flex flex-col gap-4">
+            {detailedWorkbook.sheetOrder.map((name) => {
+              const rows = detailedWorkbook.sheets[name] || [];
+              if (!rows.length) return null;
+              return (
+                <div key={name}>
+                  <div className="text-[12px] mb-2" style={{ color: T.navy, fontWeight: 600 }}>{name}</div>
+                  <Table head={rows[0].map((h) => ({ label: String(h ?? "") }))}>
+                    {rows.slice(1).map((row, i) => (
+                      <tr key={`${name}-${i}`}>
+                        {row.map((value, j) => <Td key={`${name}-${i}-${j}`}>{String(value ?? "")}</Td>)}
+                      </tr>
+                    ))}
+                  </Table>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      )}
 
       <Panel title="室別 内訳">
         <Table head={[{ label: "室名" }, { label: "面積 (m²)", align: "right" }, { label: "冷房 (kW)", align: "right" }, { label: "暖房 (kW)", align: "right" }, { label: "換気量 (m³/h)", align: "right" }]}>

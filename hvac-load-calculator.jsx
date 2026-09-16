@@ -44,7 +44,12 @@ import {
   readVariantFromUrl,
   useVariant,
 } from "./design-variants.jsx";
+
+import ENGINE_MODULE from "./hvac-calc-engine.js";
 import { buildProjectReport } from "./report-data.mjs";
+import { buildDetailedReport } from "./detailed-report.mjs";
+import { buildReportWorkbook, downloadTsv } from "./report-docs.mjs";
+import { aggregateProject } from "./project-model.mjs";
 import { downloadCsv } from "./export-csv.mjs";
 import PrintReport from "./print-report.jsx";
 
@@ -344,7 +349,7 @@ function computeAll(input) {
 // この層は入力状態の保持と表示だけを担当する。
 // =====================================================================
 
-const ENGINE = { BUILDING_TYPES, REGIONS, PACKAGE_SIZES, computeLoad, selectEquipment };
+const ENGINE = { BUILDING_TYPES, REGIONS, PACKAGE_SIZES, computeLoad, selectEquipment, computeRoomDetailedLoad: ENGINE_MODULE.computeRoomDetailedLoad };
 
 function updateRoomIn(project, roomId, patch) {
   return { ...project, rooms: project.rooms.map((room) => (room.roomId === roomId ? { ...room, ...patch } : room)) };
@@ -388,6 +393,30 @@ function HVACCalculatorInner() {
         : null,
     [project, calc]
   );
+
+  // R6詳細方式の帳票(18帳票)。既存レポートとは別枠で生成し、既存表示は変更しない。
+  // 詳細方式の負荷結果は概算方式とは別の計算経路のため、専用の入力変換を必ず通す。
+  // 帳票生成に失敗しても既存レポート画面は壊さない。
+  const detailedWorkbook = useMemo(() => {
+    try {
+      if (calc.totals.validRoomCount === 0) return null;
+      const aggregate = aggregateProject(project, calc);
+      const room = project.rooms[0];
+      if (!room) return null;
+      const loadResult = ENGINE.computeRoomDetailedLoad(project, room);
+      if (!loadResult || loadResult.status !== "ok" || !loadResult.peak || !loadResult.breakdown) return null;
+      const detailed = buildDetailedReport({
+        project, loadResult, aggregate,
+        roomResults: aggregate.byRoom, rooms: project.rooms, floors: project.floors,
+        regions: REGIONS, buildingTypes: BUILDING_TYPES,
+      });
+      return buildReportWorkbook({ detailed, aggregate, project, regions: REGIONS, buildingTypes: BUILDING_TYPES });
+    } catch (error) {
+      console.error("[HVAC] 帳票の生成に失敗しました", error);
+      return null;
+    }
+  }, [project, calc]);
+
 
   const notify = (text, tone = "info") => setMessage({ text, tone });
   const refreshList = () => setSavedProjects(storageAvailable ? listProjects() : []);
@@ -709,6 +738,8 @@ function HVACCalculatorInner() {
             calc={calc}
             report={report}
             onDownloadCsv={() => report && downloadCsv(report, `${project.projectName || "hvac-load"}.csv`)}
+            detailedWorkbook={detailedWorkbook}
+            onDownloadTsv={() => detailedWorkbook && downloadTsv(detailedWorkbook, `${project.projectName || "hvac-load"}-R6.tsv`)}
             onPrint={() => window.print()}
             onBack={() => handleNavigate("workspace")}
           />

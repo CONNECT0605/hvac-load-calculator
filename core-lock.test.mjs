@@ -153,11 +153,13 @@ collect(d, "detailed");
 const detailedHash = createHash("sha256").update(detailedRows.join("\n")).digest("hex");
 const EXPECTED_DETAILED_HASH = process.env.UPDATE_CORE_LOCK
   ? detailedHash
-  : "c1a8aa169aa4d567b961c6f0e8f624e5d97f91ad28ee7fbff3fb1bfe72355fba";
+  : "627d1e9933e6dac1324718a4421dbb3d067ea5aca2e5f674ebd5c3320e434bcb";
 
 check(detailedRows.length >= 28, `R6詳細方式の出力に十分な数値がある(実際 ${detailedRows.length}項目)`);
 check(d.heatingBreakdown !== null, "R6詳細方式: 暖房の内訳も算出される");
 check(d.loadItems.cooling.length === 8 && d.loadItems.heating.length === 5, "R6詳細方式: 公的基準の負荷項目数(冷房8・暖房5)を保持");
+check("othersSensibleKW" in d.breakdown && "systemLossKW" in d.breakdown, "R6詳細方式: 項目5(その他室内負荷)・項目8(ダクト等)を内訳に保持");
+check("humidificationKW" in d.heatingBreakdown, "R6詳細方式: 加湿量を暖房内訳に保持");
 check(detailedHash === EXPECTED_DETAILED_HASH, `R6詳細方式のハッシュが一致する\n    期待 ${EXPECTED_DETAILED_HASH}\n    実際 ${detailedHash}`);
 check(d.peak.coolingHour === 14, "R6詳細方式: 最大冷房負荷時刻が凍結されている(14時=日射ピーク)");
 check(Math.abs(d.designLoadCoolingKW - d.peak.coolingKW) < 1e-9, "R6詳細方式: 余裕率0のとき設計用=ピーク");
