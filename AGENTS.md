@@ -109,9 +109,36 @@ E2E は `e2e/` にあり、`vite preview` を自動起動する。
   将来 図面解析から室・面積・開口部を埋められる余地を残す(現行UIにアップロード導線は無い)。
 - 帳票のフル18帳票・系統別集計は `professional-spec-data-model-v1.md` で将来拡張と明記。
 
+## R6詳細方式(積み上げ)の構成
+
+計算の中核は `hvac-calc-engine.js` の `computeDetailedLoad()`(CommonJS)。
+UIから使うための構成は次のとおり。
+
+- `r6-engine.mjs` … engine(CommonJS)をESMとして再輸出するだけのブリッジ。
+  ブラウザバンドルには `vite.config.mjs` の `build.commonjsOptions.include` で
+  `hvac-calc-engine.js` を明示的に含める必要がある。
+- `detailed-building.mjs` … 室別の詳細方式結果を**同一時刻で合算し時系列の最大値を
+  採用**する方式(`professional-spec-data-model-v1.md` §E の確定仕様)で
+  室→系統→階→建物へ集計する。**加算のみ**で新しい係数・式を持たない。
+  `Room.systemId` が系統集計のキー(未設定は「系統未設定」)。
+- `detailed-report.mjs` … 帳票整形(8+5項目・内訳・時刻別・集計・出典・
+  未確認事項・チェックリスト)。数値は engine の結果のみで、再計算しない。
+- `app-screens.jsx` の `DetailedReportScreen` / `print-detailed-report.jsx` /
+  `export-csv.mjs` の `buildDetailedCsv` … 画面・印刷・CSVへの接続。
+
+**計算式・係数を新設してはならない。** 未確認の係数は engine 側で
+`notVerified` に列挙され、計算には寄与しない(値の発明禁止)。
+
+### STABRO互換マトリクスの残存FAIL(ブロッカー)
+
+`docs/STABRO-COMPATIBILITY-MATRIX.md` の残り11件はすべて
+**非公開データ**(建築設備設計基準R6本体の表編・STABRO内部の地区/材料データ)に
+起因するもので、取得不能。値を創作せず `notVerified` として明示したまま FAIL を維持する。
+コード起因のFAILは解消済み。
+
 ## 既知の制約
 
 - 未保存の入力はリロードで失われる(自動保存/draft は要求仕様に無い)。
   保存はヘッダーの「案件を保存」で明示的に行う。
-- 詳細モード(窓・外皮・内部発熱の積み上げ)は未実装。現行は原単位方式。
-  `hvac-detailed-mode-spec-v1.md` に設計のみ存在。
+- 暖房時は設計外気温度(冬期)が非公開のため、暖房負荷は算定せず null を返す
+  (冷房を選定基準とする)。値を推測で埋めない。
