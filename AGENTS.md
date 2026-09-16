@@ -41,7 +41,32 @@ COREハッシュ(8用途×8地域=64ケース):
 `UPDATE_CORE_LOCK=1 node core-lock.test.mjs` で期待値を更新すること。
 根拠なく数値を変えてはならない。
 
-STABRO / SeACD との照合結果は `stabro-seacd-audit-2026-09-15.md`。
+STABRO / SeACD との照合結果は `docs/STABRO-COMPATIBILITY-MATRIX.md`。
+
+## 計算方式は2系統ある
+
+| 方式 | 関数 | 用途 |
+| --- | --- | --- |
+| 原単位方式(概算) | `computeLoad` / `selectEquipment` | 面積×原単位の概算。既存。**変更禁止** |
+| R6詳細方式(積み上げ) | `computeDetailedLoad` | 建築設備設計基準R6相当の積み上げ。SHARED-LOGICの外側 |
+
+`computeDetailedLoad` は `// ===SHARED-LOGIC-START===` の**外側**にあるため
+`check:sync` の対象外であり、既存COREに影響しない。
+
+### 係数を創作しない規約
+
+- 確認できた係数は出典(`coefficientSources`)と共に持つ。未確認は `null` のままにする。
+- 基準値で補完した場合は `defaultedFromR6` に記録する(黙って埋めない)。
+- 計算に寄与できない未確認項目は `notVerified` に列挙する(隠さない)。
+- **`Number(null) === 0` に注意。** 未入力を0として扱うと未確認係数が計算に混入するため、
+  詳細方式では `toNum()` で厳密に判定する。
+
+### 詳細方式のロック
+
+`core-lock.test.mjs` が2つのハッシュを凍結している。
+- 原単位方式: `827a1d30c7f576b84087492f86d45bb0cfcbaf8d5329591a73c42a60cd869384`
+- R6詳細方式: `35c2890a7b833e9defc198f4df740efbca8ba76f9ca72f3d996d7f12904d1588`
+
 
 ## テスト
 

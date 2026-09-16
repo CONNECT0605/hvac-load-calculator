@@ -124,6 +124,43 @@ const hash = createHash("sha256").update(rows.join("\n")).digest("hex");
 const EXPECTED_HASH = process.env.UPDATE_CORE_LOCK ? hash : "827a1d30c7f576b84087492f86d45bb0cfcbaf8d5329591a73c42a60cd869384";
 check(hash === EXPECTED_HASH, `COREハッシュが一致する(8用途×8地域=64ケース)\n    期待 ${EXPECTED_HASH}\n    実際 ${hash}`);
 
+// --- R6詳細方式(積み上げ)の固定 ---------------------------------------
+// 既存のSHARED-LOGICとは別に、新設した computeDetailedLoad の数値も凍結する。
+const detailedCase = {
+  regionId: "kanto", usage: "office",
+  floorAreaTotal: 500, ceilingHeight: 2.6, occupants: 50,
+  coolingSetTemp: 26, heatingSetTemp: 22,
+  indoorRHCooling: 50, indoorRHHeating: 40,
+  lightingWm2: 9, equipmentWm2: 20,
+  outdoorAirVolumeM3h: 1500,
+  walls: [{ area: 200, orientation: "s", uValue: 1.5 }],
+  windows: [{ area: 50, orientation: "s", uValue: 5.8, scValue: 0.7 }],
+  roof: { area: 500, uValue: 1.0 },
+  floorEnvelope: { area: 500, uValue: 1.2 },
+  solarWm2: { s: { 9: 200, 12: 400, 14: 450, 16: 300 }, w: { 9: 150, 12: 350, 14: 500, 16: 600 } },
+  hours: [9, 12, 14, 16],
+  heatingOutdoorDB: 0,
+};
+const d = engine.computeDetailedLoad(detailedCase);
+const detailedRows = [];
+function collect(obj, path) {
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === "number") detailedRows.push(`${path}.${k}=${v.toFixed(6)}`);
+    else if (v && typeof v === "object" && !Array.isArray(v)) collect(v, `${path}.${k}`);
+  }
+}
+collect(d, "detailed");
+const detailedHash = createHash("sha256").update(detailedRows.join("\n")).digest("hex");
+const EXPECTED_DETAILED_HASH = process.env.UPDATE_CORE_LOCK
+  ? detailedHash
+  : "35c2890a7b833e9defc198f4df740efbca8ba76f9ca72f3d996d7f12904d1588";
+
+check(detailedRows.length >= 20, `R6詳細方式の出力に十分な数値がある(実際 ${detailedRows.length}項目)`);
+check(detailedHash === EXPECTED_DETAILED_HASH, `R6詳細方式のハッシュが一致する\n    期待 ${EXPECTED_DETAILED_HASH}\n    実際 ${detailedHash}`);
+check(d.peak.coolingHour === 14, "R6詳細方式: 最大冷房負荷時刻が凍結されている(14時=日射ピーク)");
+check(Math.abs(d.designLoadCoolingKW - d.peak.coolingKW) < 1e-9, "R6詳細方式: 余裕率0のとき設計用=ピーク");
+check(Math.abs(d.hourlyResults.reduce((a, h) => a + h.coolingSensibleKW + h.coolingLatentKW - h.coolingTotalKW, 0)) < 1e-9, "R6詳細方式: 全時刻で顕熱+潜熱=全熱");
+
 // --- 結果出力 ---------------------------------------------------------
 console.log("=== LOAD CORE ロック(リグレッション防止) ===");
 if (fail > 0) {
