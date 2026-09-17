@@ -47,7 +47,7 @@ import {
 } from "./design-variants.jsx";
 import { buildProjectReport } from "./report-data.mjs";
 import { downloadCsv, downloadDetailedCsv } from "./export-csv.mjs";
-import { computeDetailedProject, toReportLoadResult, aggregateDetailedProject } from "./detailed-building.mjs";
+import { computeDetailedProject, toReportLoadResult, aggregateDetailedProject, buildEquipmentSchedule } from "./detailed-building.mjs";
 import { buildDetailedReport } from "./detailed-report.mjs";
 import PrintReport from "./print-report.jsx";
 import PrintDetailedReport from "./print-detailed-report.jsx";
@@ -407,6 +407,7 @@ function HVACCalculatorInner() {
       floors: project.floors,
       regions: REGIONS,
       buildingTypes: BUILDING_TYPES,
+      equipmentSchedule: buildEquipmentSchedule(detailed, aggregate),
     });
   }, [project, calc]);
 

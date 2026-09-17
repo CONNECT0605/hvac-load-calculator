@@ -49,6 +49,14 @@ export function buildDetailedCsv(report) {
   for (const row of report.aggregateFloors || []) rows.push(["階集計", row[0], `冷房 ${row[3]} / 暖房 ${row[4]}`, `${row[1]} / ${row[2]}`]);
   for (const row of report.aggregateBuilding || []) rows.push(["建物集計", row[0], `冷房 ${row[3]} / 暖房 ${row[4]} / 基準 ${row[5]}`, `${row[1]} / ${row[2]}`]);
   for (const [label, value] of report.ventilation || []) rows.push(["換気・すきま風", label, value, ""]);
+  // 機器選定・機器表(既存 selectEquipment() の結果の整形のみ)
+  if (report.equipment?.status === "ok") {
+    for (const [label, value] of report.equipment.summary || []) rows.push(["機器選定", label, value, ""]);
+    for (const row of report.equipment.systemRows || []) rows.push(["機器表(系統別)", row[0], `必要 ${row[2]} / 推奨 ${row[4]} × ${row[5]}`, `${row[1]} / ${row[3]} / 設置 ${row[6]} / ${row[7]}`]);
+    for (const row of report.equipment.modelRows || []) rows.push(["機器表(実在型式)", `${row[0]} ${row[1]}`, `冷房 ${row[2]} / 暖房 ${row[3]}`, `${row[4]} / ${row[5]} / ${row[6]} / 出典 ${row[7]}`]);
+  } else if (report.equipment) {
+    rows.push(["機器選定", "状態", report.equipment.reason, ""]);
+  }
   for (const row of report.coefficientSources || []) rows.push(["係数の出典", row[0], `${row[1]}`, `${row[2]} ${row[3]} ${row[4]}`]);
   for (const item of report.defaultedFromR6 || []) rows.push(["基準値補完", item, "基準値で補完", ""]);
   for (const item of report.notVerified || []) rows.push(["未確認", item, "要確認", "非公開データ等のため未確定"]);

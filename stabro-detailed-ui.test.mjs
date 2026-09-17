@@ -4,7 +4,7 @@
 // ここで検証するのは接続と整形であり、新しい係数・計算式の正当性は主張しない。
 import { createRequire } from "node:module";
 import { createProjectDoc, createFloor, createRoom } from "./project-model.mjs";
-import { computeDetailedProject, toReportLoadResult, aggregateDetailedProject } from "./detailed-building.mjs";
+import { computeDetailedProject, toReportLoadResult, aggregateDetailedProject, buildEquipmentSchedule } from "./detailed-building.mjs";
 import { buildDetailedReport } from "./detailed-report.mjs";
 import { buildDetailedCsv } from "./export-csv.mjs";
 
@@ -84,6 +84,7 @@ check(noSysAgg.bySystem.length === 1 && noSysAgg.bySystem[0].label === "系統�
 
 // 帳票接続
 const reportInput = toReportLoadResult(detailed);
+const schedule = buildEquipmentSchedule(detailed, aggregate);
 const report = buildDetailedReport({
   project,
   loadResult: reportInput,
@@ -92,6 +93,7 @@ const report = buildDetailedReport({
   floors: project.floors,
   regions: engine.REGIONS,
   buildingTypes: engine.BUILDING_TYPES,
+  equipmentSchedule: schedule,
 });
 check(report.title === "熱負荷計算書(R6詳細方式)", "帳票タイトルがR6詳細方式");
 check(report.coolingItems.length === 8, "帳票の冷房負荷項目が8項目");
@@ -141,6 +143,55 @@ const invAgg = aggregateDetailedProject(withInvalid, invDetailed);
 check(invDetailed.validRoomCount === 1, "面積未入力の室は計算不能として除外される");
 check(invAgg.byRoom.length === 2, "室別集計には計算不能室も状態付きで残る");
 check(invAgg.bySystem.every((s) => s.validRoomCount === 1), "系統集計には計算不能室の負荷が混入しない");
+
+// ============================================================================
+// 機器選定・機器表の接続(既存 selectEquipment()/EQUIPMENT_DB をそのまま使う)
+// ここでは「新しい選定ロジックを足していないこと」と「既存の選定と一致すること」を確認する。
+// ============================================================================
+const expectedSelection = engine.selectEquipment({
+  status: "ok",
+  requiredCapacityKW: detailed.requiredCapacityKW,
+  floors: project.floors.length,
+  basis: detailed.basis,
+});
+check(detailed.equipmentSelection.status === "ok", "詳細方式の必要能力が既存selectEquipmentへ渡り選定できる");
+check(detailed.equipmentSelection.recommended.size === expectedSelection.recommended.size, "詳細方式の選定クラス = 既存selectEquipmentの選定クラス(同一必要能力)");
+check(detailed.equipmentSelection.recommended.count === expectedSelection.recommended.count, "詳細方式の選定台数 = 既存selectEquipmentの選定台数(同一必要能力)");
+check(close(detailed.equipmentSelection.recommended.installedKW, expectedSelection.recommended.installedKW), "設置合計容量が既存選定と一致する");
+check(detailed.equipmentSelection.selectionReasonText === expectedSelection.selectionReasonText, "選定理由文が既存selectEquipmentの出力そのまま");
+
+check(schedule.status === "ok", "機器表が生成される");
+check(schedule.recommended.scope === "建物全体", "機器表の建物全体行がある");
+check(close(schedule.recommended.requiredCapacityKW, detailed.requiredCapacityKW), "機器表の必要能力 = 詳細方式の必要能力");
+check(schedule.recommended.count === Math.max(1, Math.ceil(detailed.requiredCapacityKW / schedule.recommended.size)), "機器表の台数 = 必要能力÷容量クラスの切り上げ(既存ロジック)");
+check(schedule.systemRows.length === aggregate.bySystem.filter((s) => s.validRoomCount > 0).length, "系統別の機器表が計算可能な系統数だけある");
+check(schedule.systemRows.every((s) => s.size === null || engine.PACKAGE_SIZES.some((p) => p.kw === s.size)), "系統別の推奨クラスは既存PACKAGE_SIZESの値のみ");
+check(schedule.recommended.selectionType === "formal", "既存EQUIPMENT_DBに実在型式があるクラスはformalと明示される");
+check(schedule.modelRows.length === engine.EQUIPMENT_DB[schedule.recommended.size].length, "実在型式候補がEQUIPMENT_DBの件数と一致する");
+check(schedule.modelRows.every((m) => m.maker && m.model), "実在型式候補にメーカー・型式が入る(創作していない)");
+
+// 帳票・CSVへの機器表の接続
+check(report.equipment.status === "ok", "帳票に機器選定セクションが入る");
+check(report.equipment.summary.some(([k]) => k === "推奨容量クラス"), "帳票の機器選定に推奨容量クラスがある");
+check(report.equipment.systemRows.length === schedule.systemRows.length, "帳票の系統別機器表が機器表と一致する");
+check(report.equipment.modelRows.length === schedule.modelRows.length, "帳票の実在型式候補が機器表と一致する");
+check(report.checklist.some((row) => row[1] === "必要能力 → 機器選定 → 機器表" && row[2] === "実装済"), "チェックリストで機器選定→機器表が実装済と明示される");
+
+const csvWithEquipment = buildDetailedCsv(report);
+check(csvWithEquipment.includes("機器選定"), "機器表CSVに機器選定が含まれる");
+check(csvWithEquipment.includes("機器表(系統別)"), "機器表CSVに系統別の機器表が含まれる");
+check(csvWithEquipment.includes("機器表(実在型式)"), "機器表CSVに実在型式候補が含まれる");
+check(csvWithEquipment.includes(expectedSelection.recommended.code), "機器表CSVに選定クラスの号機が含まれる");
+
+// 必要能力が算出できない場合は機器表を作らず、理由を返す(空欄にしない)
+const noLoad = buildEquipmentSchedule({ equipmentSelection: { status: "invalid", reason: "テスト理由" } }, { bySystem: [] });
+check(noLoad.status === "invalid" && noLoad.reason === "テスト理由", "必要能力が無い場合は機器表を作らず理由を返す");
+const noLoadReport = buildDetailedReport({
+  project, loadResult: reportInput, aggregate, rooms: project.rooms, floors: project.floors,
+  regions: engine.REGIONS, buildingTypes: engine.BUILDING_TYPES, equipmentSchedule: noLoad,
+});
+check(noLoadReport.equipment.status === "invalid" && noLoadReport.equipment.reason === "テスト理由", "機器表が無い帳票は理由を明示する");
+check(noLoadReport.checklist.some((row) => row[1] === "必要能力 → 機器選定 → 機器表" && row[2] === "未実装"), "選定できない場合はチェックリストで未実装と明示される");
 
 console.log(`\n=== 詳細方式 建物集計・帳票接続テスト 結果: ${pass}件成功 / ${fail}件失敗 ===`);
 if (fail > 0) process.exit(1);

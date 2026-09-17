@@ -392,3 +392,31 @@ test("20 室に空調系統名を入力でき、詳細帳票の系統集計に�
   await openStep(page, "室");
   await expect(stepBody(page).locator("table tbody tr").first().locator("input[type=text]").nth(1)).toHaveValue("系統A");
 });
+
+// 21
+test("21 詳細方式の計算書に機器選定・機器表が接続され、既存機器データが表示される", async ({ page }) => {
+  await buildProject(page, { name: "機器表テスト", area: 300, roomArea: 300 });
+  await openStep(page, "室");
+  await stepBody(page).locator("table tbody tr").first().locator("input[type=text]").nth(1).fill("系統A");
+  await page.waitForTimeout(200);
+  await runCalc(page);
+  await gotoScreen(page, "レポート");
+  await page.getByRole("button", { name: "詳細方式の計算書" }).click();
+  const main = page.locator("main");
+  await expect(main).toContainText("機器選定(建物全体)");
+  await expect(main).toContainText("機器表(系統別)");
+  await expect(main).toContainText("必要能力 → 機器選定 → 機器表");
+  // 既存EQUIPMENT_DBの実在型式が出る(選定クラスに実在型式がある場合)
+  const hasModels = await main.getByText("機器表(実在型式候補)").count();
+  if (hasModels > 0) {
+    await expect(main).toContainText("ダイキン工業");
+  }
+  // CSVにも機器表が載る
+  const [dl] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "CSV出力(詳細)" }).click(),
+  ]);
+  const csv = (await import("node:fs")).readFileSync(await dl.path()).toString("utf-8");
+  expect(csv).toContain("機器選定");
+  expect(csv).toContain("機器表(系統別)");
+});

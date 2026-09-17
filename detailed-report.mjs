@@ -15,7 +15,7 @@ const kw = (v) => (v === null || v === undefined ? "―" : `${v.toFixed(1)} kW`)
  * @param {object} args.aggregate aggregateProject() の戻り値
  * @param {Array}  args.roomResults [{ room, floorLabel, systemLabel, load }]
  */
-export function buildDetailedReport({ project, loadResult, aggregate, roomResults, rooms, floors, regions, buildingTypes }) {
+export function buildDetailedReport({ project, loadResult, aggregate, roomResults, rooms, floors, regions, buildingTypes, equipmentSchedule }) {
   const region = (regions || []).find((r) => r.id === project.regionId);
   const usageLabel = (id) => {
     const t = (buildingTypes || []).find((b) => b.id === id);
@@ -23,6 +23,7 @@ export function buildDetailedReport({ project, loadResult, aggregate, roomResult
   };
   const notVerified = loadResult.notVerified || [];
   const defaultedFromR6 = loadResult.defaultedFromR6 || [];
+  const equipment = buildEquipmentSection(equipmentSchedule);
   const items = loadResult.loadItems || { cooling: [], heating: [] };
   const bd = loadResult.breakdown || {};
   const hbd = loadResult.heatingBreakdown || {};
@@ -143,6 +144,7 @@ export function buildDetailedReport({ project, loadResult, aggregate, roomResult
       ["外気量", `${Math.round(loadResult.ventilationM3h || 0).toLocaleString()} m³/h`],
       ["すきま風量", `${Math.round(loadResult.infiltrationVolumeM3h || 0).toLocaleString()} m³/h`],
     ],
+    equipment,
     // 係数と出典
     coefficientSources: sourceRows,
     // 基準値で補完した項目
@@ -151,19 +153,69 @@ export function buildDetailedReport({ project, loadResult, aggregate, roomResult
     notVerified,
     warnings: loadResult.warnings || [],
     // チェックリスト(実装状態の自己点検。数値の創作は行わない)
-    checklist: buildChecklist({ items, notVerified, defaultedFromR6, warnings: loadResult.warnings || [], sourceRows }),
+    checklist: buildChecklist({ items, notVerified, defaultedFromR6, warnings: loadResult.warnings || [], sourceRows, equipment }),
   };
 }
 
-function buildChecklist({ items, notVerified, defaultedFromR6, warnings, sourceRows }) {
-  const rows = [];
+/**
+ * 機器選定・機器表のセクションを作る。buildEquipmentSchedule() が既存
+ * selectEquipment()/EQUIPMENT_DB から作った表を、帳票の行形式へ整形するだけ。
+ * 選定・計算は行わない。機器表が無い場合は理由を1行で示す(空欄にしない)。
+ */
+function buildEquipmentSection(schedule) {
+  if (!schedule || schedule.status !== "ok" || !schedule.recommended) {
+    return {
+      status: "invalid",
+      reason: schedule?.reason || "必要能力が算出できないため、機器選定は行えません(要確認)。",
+      summary: [],
+      systemRows: [],
+      modelRows: [],
+    };
+  }
+  const r = schedule.recommended;
+  const summary = [
+    ["必要能力(選定基準)", kw(r.requiredCapacityKW)],
+    ["選定基準", r.basis === "cooling" ? "冷房支配" : "暖房支配"],
+    ["推奨容量クラス", `${r.size.toFixed(1)} kW（${r.code} / ${r.hp}馬力）`],
+    ["台数", `${r.count} 台`],
+    ["設置合計容量", kw(r.installedKW)],
+    ["余裕率", `+${r.surplusPct.toFixed(1)} %`],
+    ["選定区分", r.selectionType === "formal" ? "実在機器による正式選定" : "容量クラス仮選定（実在機器未確認）"],
+    ["選定理由", schedule.selectionReasonText],
+  ];
+  const systemRows = (schedule.systemRows || []).map((s) => [
+    s.systemLabel,
+    `${s.roomCount} 室`,
+    kw(s.requiredCapacityKW),
+    s.basis === "cooling" ? "冷房支配" : "暖房支配",
+    s.size === null ? "―" : `${s.size.toFixed(1)} kW（${s.code} / ${s.hp}馬力）`,
+    s.count === null ? "―" : `${s.count} 台`,
+    s.installedKW === null ? "―" : kw(s.installedKW),
+    s.selectionType === "formal" ? "実在機器あり" : "容量クラス仮選定",
+  ]);
+  const modelRows = (schedule.modelRows || []).map((m) => [
+    m.maker,
+    m.model,
+    m.coolingKW === null || m.coolingKW === undefined ? "―" : `${m.coolingKW.toFixed(1)} kW`,
+    m.heatingKW === null || m.heatingKW === undefined ? "―" : `${m.heatingKW.toFixed(1)} kW`,
+    m.indoorType || "―",
+    m.config || "―",
+    m.power || "―",
+    m.source?.name || "―",
+  ]);
+  return { status: "ok", reason: null, summary, systemRows, modelRows };
+}
+
+function buildChecklist({ items, notVerified, defaultedFromR6, warnings, sourceRows, equipment }) {
   const stateLabel = (implemented) => (implemented === true ? "実装済" : implemented === "partial" ? "一部実装" : "未実装");
+  const rows = [];
   for (const it of items.cooling || []) rows.push(["冷房", `負荷項目 ${it.no}. ${it.label}`, stateLabel(it.implemented), it.implemented === true ? "計算に反映" : "係数・データ未確認のため計算に未反映"]);
   for (const it of items.heating || []) rows.push(["暖房", `負荷項目 ${it.no}. ${it.label}`, stateLabel(it.implemented), it.implemented === true ? "計算に反映" : "係数・データ未確認のため計算に未反映"]);
   rows.push(["計算", "時刻別の最大負荷抽出", "実装済", "同一時刻で室別負荷を合算し、時系列の最大値を採用"]);
   rows.push(["計算", "冷暖房別々の設計用負荷と選定基準", "実装済", "設計用負荷の大きい方を選定基準とする"]);
   rows.push(["単位", "SI単位(kW・m²・m³/h・℃・%)", "実装済", "SF・BTU/hr・tonnageは未使用"]);
   rows.push(["集計", "室 → 系統 → 階 → 建物", "実装済", "合算のみ(新しい式なし)"]);
+  rows.push(["機器", "必要能力 → 機器選定 → 機器表", equipment?.status === "ok" ? "実装済" : "未実装", equipment?.status === "ok" ? "既存の selectEquipment()/EQUIPMENT_DB をそのまま使用(新しい選定ロジックなし)" : "必要能力が算出できないため未選定"]);
   rows.push(["出典", "係数の出典記録", sourceRows.length ? "記録済" : "未記録", `${sourceRows.length}件の係数に出典を付与`]);
   for (const d of defaultedFromR6) rows.push(["基準値補完", d, "基準値で補完", "入力が無い項目を基準値で補完(補完した旨を明示)"]);
   for (const n of notVerified) rows.push(["未確認", n, "要確認", "非公開データ等のため未確定。値を創作せず未確認として明示"]);

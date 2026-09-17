@@ -12,7 +12,7 @@
 // だけを行う。係数が未確認の項目は engine 側で 0 として扱われ notVerified に
 // 記録されるため、ここで値を作ることはない。
 // ============================================================================
-import { DETAILED_HOURS, R6_LOAD_ITEMS, computeDetailedLoad, roomToDetailedLoadInput } from "./r6-engine.mjs";
+import { DETAILED_HOURS, R6_LOAD_ITEMS, computeDetailedLoad, roomToDetailedLoadInput, selectEquipment } from "./r6-engine.mjs";
 
 const COMPONENT_KEYS = [
   "envelopeKW",
@@ -122,10 +122,25 @@ export function computeDetailedProject(project) {
   const marginFactor = 1 + margin / 100;
   const designLoadCoolingKW = peakCooling.coolingTotalKW * marginFactor;
   const designLoadHeatingKW = peakHeating ? peakHeating.heatingTotalKW * marginFactor : null;
+  const requiredCapacityKW = designLoadHeatingKW !== null
+    ? Math.max(designLoadCoolingKW, designLoadHeatingKW)
+    : designLoadCoolingKW;
+  const basis = designLoadHeatingKW !== null && designLoadHeatingKW > designLoadCoolingKW ? "heating" : "cooling";
 
   const warnings = valid.length
     ? [...new Set(valid.flatMap((r) => r.load.warnings || []))]
     : ["計算可能な室がありません(室の面積と室名を入力してください)。"];
+
+  // 機器選定は既存の selectEquipment() をそのまま呼ぶ(新しい選定ロジックは持たない)。
+  // selectEquipment が必要とするのは status / requiredCapacityKW / floors / basis のみ。
+  const equipmentSelection = valid.length
+    ? selectEquipment({
+        status: "ok",
+        requiredCapacityKW: requiredCapacityKW,
+        floors: project.floors.length,
+        basis: basis,
+      })
+    : { status: "invalid", reason: "計算可能な室がないため、機種選定は行えません(要確認)。", candidates: [], recommended: null, selectionReasonText: null };
 
   return {
     rooms,
@@ -145,10 +160,9 @@ export function computeDetailedProject(project) {
     infiltrationVolumeM3h,
     designLoadCoolingKW,
     designLoadHeatingKW,
-    requiredCapacityKW: designLoadHeatingKW !== null
-      ? Math.max(designLoadCoolingKW, designLoadHeatingKW)
-      : designLoadCoolingKW,
-    basis: designLoadHeatingKW !== null && designLoadHeatingKW > designLoadCoolingKW ? "heating" : "cooling",
+    requiredCapacityKW,
+    basis,
+    equipmentSelection,
     notVerified: [...new Set(valid.flatMap((r) => r.load.notVerified || []))],
     defaultedFromR6: [...new Set(valid.flatMap((r) => r.load.defaultedFromR6 || []))],
     coefficientSources: valid.length ? valid[0].load.coefficientSources || {} : {},
@@ -274,5 +288,94 @@ export function aggregateDetailedProject(project, detailed) {
   building.requiredCapacityKW = detailed.requiredCapacityKW;
   building.basis = detailed.basis;
   return { byRoom, bySystem, byFloor, building };
+}
+
+/**
+ * 機器表(機器項目)を作る。数値は既存の selectEquipment() の結果と EQUIPMENT_DB の
+ * 実在型式のみを並べ替えて表形式にするだけで、新しい選定・新しい計算は行わない。
+ * 系統別の必要能力は aggregateDetailedProject() の系統集計(合算のみ)を使う。
+ *
+ * @param {object} detailed computeDetailedProject() の戻り値
+ * @param {object} aggregate aggregateDetailedProject() の戻り値
+ * @returns {{status: string, rows: Array, recommended: object|null, selectionReasonText: string|null, reason: string|null}}
+ */
+export function buildEquipmentSchedule(detailed, aggregate) {
+  const selection = detailed?.equipmentSelection;
+  if (!selection || selection.status !== "ok" || !selection.recommended) {
+    return {
+      status: "invalid",
+      reason: selection?.reason || "必要能力が算出できないため、機器表を作成できません(要確認)。",
+      rows: [],
+      recommended: null,
+      selectionReasonText: null,
+    };
+  }
+
+  const recommended = selection.recommended;
+
+  // 系統別の必要能力(既存の系統集計=合算のみ)。系統ごとに同じ既存 selectEquipment を当てる。
+  const systemRows = (aggregate?.bySystem || [])
+    .filter((s) => s.validRoomCount > 0 && s.requiredCapacityKW > 0)
+    .map((s) => {
+      const picked = selectEquipment({
+        status: "ok",
+        requiredCapacityKW: s.requiredCapacityKW,
+        floors: 1,
+        basis: s.basis,
+      });
+      const r = picked.status === "ok" ? picked.recommended : null;
+      return {
+        systemLabel: s.label,
+        roomCount: s.roomCount,
+        requiredCapacityKW: s.requiredCapacityKW,
+        basis: s.basis,
+        size: r ? r.size : null,
+        code: r ? r.code : null,
+        hp: r ? r.hp : null,
+        count: r ? r.count : null,
+        installedKW: r ? r.installedKW : null,
+        surplusPct: r ? r.surplusPct : null,
+        selectionType: r ? r.selectionType : null,
+        realModels: r ? r.realModels : [],
+      };
+    });
+
+  // 建物全体の機器項目(推奨クラス。台数・設置容量・余裕率は selectEquipment の値そのまま)
+  const buildingRow = {
+    scope: "建物全体",
+    requiredCapacityKW: detailed.requiredCapacityKW,
+    basis: detailed.basis,
+    size: recommended.size,
+    code: recommended.code,
+    hp: recommended.hp,
+    count: recommended.count,
+    installedKW: recommended.installedKW,
+    surplusPct: recommended.surplusPct,
+    selectionType: recommended.selectionType,
+    realModels: recommended.realModels,
+  };
+
+  // 実在型式の明細(型式ごとに1行)。推奨クラスに実在型式がある場合のみ。
+  const modelRows = recommended.realModels.map((m) => ({
+    scope: `建物全体 / ${recommended.size.toFixed(1)}kWクラス`,
+    maker: m.maker,
+    model: m.model,
+    coolingKW: m.coolingKW,
+    heatingKW: m.heatingKW,
+    indoorType: m.indoorType,
+    config: m.config,
+    power: m.power,
+    source: m.source || null,
+  }));
+
+  return {
+    status: "ok",
+    reason: null,
+    recommended: buildingRow,
+    selectionReasonText: selection.selectionReasonText,
+    systemRows,
+    modelRows,
+    rows: [buildingRow, ...systemRows],
+  };
 }
 

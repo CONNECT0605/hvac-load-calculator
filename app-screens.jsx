@@ -509,6 +509,10 @@ export function DetailedReportScreen({ project, detailedReport, onDownloadCsv, o
       {section("階集計", r.aggregateFloors.map((row) => [row[0], `冷房 ${row[3]} / 暖房 ${row[4]}`, `${row[1]} / ${row[2]}`]))}
       {section("建物集計", r.aggregateBuilding.map((row) => [row[0], `冷房 ${row[3]} / 暖房 ${row[4]}`, `基準 ${row[5]} / ${row[1]} / ${row[2]}`]))}
       {section("換気量・すきま風量", r.ventilation.map(([k, v]) => [k, v]))}
+      {r.equipment?.status === "ok" && section("機器選定(建物全体)", r.equipment.summary.map(([k, v]) => [k, v]), ["項目", "内容", ""])}
+      {r.equipment?.status === "ok" && r.equipment.systemRows.length > 0 && section("機器表(系統別)", r.equipment.systemRows, ["系統", "室数", "必要能力", "選定基準", "推奨クラス", "台数", "設置合計", "区分"])}
+      {r.equipment?.status === "ok" && r.equipment.modelRows.length > 0 && section("機器表(実在型式候補)", r.equipment.modelRows, ["メーカー", "型式", "冷房能力", "暖房能力", "室内機形状", "構成", "電源", "出典"])}
+      {r.equipment && r.equipment.status !== "ok" && section("機器選定", [[r.equipment.reason, "", ""]])}
       {section("係数と出典", r.coefficientSources.map((row) => [row[0], `${row[1]}`, `${row[2]} / ${row[4]}`]))}
       {section("基準値で補完した項目", r.defaultedFromR6.map((d) => [d, "基準値で補完", ""]))}
       {section("未確認事項(値を創作せず明示)", r.notVerified.map((n) => [n, "要確認", ""]))}

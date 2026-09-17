@@ -41,6 +41,10 @@ export default function PrintDetailedReport({ report }) {
       <Section title="階集計" rows={r.aggregateFloors.map((row) => [row[0], `冷房 ${row[3]} / 暖房 ${row[4]}`, `${row[1]}`])} />
       <Section title="建物集計" rows={r.aggregateBuilding.map((row) => [row[0], `冷房 ${row[3]} / 暖房 ${row[4]}`, `基準 ${row[5]}`])} />
       <Section title="換気量・すきま風量" rows={r.ventilation.map(([k, v]) => [k, v])} />
+      {r.equipment?.status === "ok" && <Section title="機器選定(建物全体)" rows={r.equipment.summary.map(([k, v]) => [k, v])} />}
+      {r.equipment?.status === "ok" && <Section title="機器表(系統別)" rows={r.equipment.systemRows} />}
+      {r.equipment?.status === "ok" && <Section title="機器表(実在型式候補)" rows={r.equipment.modelRows} />}
+      {r.equipment && r.equipment.status !== "ok" && <Section title="機器選定" rows={[[r.equipment.reason, ""]]} />}
       <Section title="係数と出典" rows={r.coefficientSources.map((row) => [row[0], row[1], `${row[2]} / ${row[4]}`])} />
       <Section title="基準値で補完した項目" rows={r.defaultedFromR6.map((d) => [d, "基準値で補完"])} />
       <Section title="未確認事項(値を創作せず明示)" rows={r.notVerified.map((n) => [n, "要確認"])} />

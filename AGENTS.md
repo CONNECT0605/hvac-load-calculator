@@ -129,6 +129,28 @@ UIから使うための構成は次のとおり。
 **計算式・係数を新設してはならない。** 未確認の係数は engine 側で
 `notVerified` に列挙され、計算には寄与しない(値の発明禁止)。
 
+### 機器選定・機器表の接続(2026-09-17)
+
+データの流れは次の1本である。**新しい選定ロジックは持たない。**
+
+```
+Project → Floor → Room → roomToDetailedLoadInput → computeDetailedLoad
+  → computeDetailedProject(同時刻合算) → aggregateDetailedProject(室/系統/階/建物)
+  → detailed.requiredCapacityKW → 既存 selectEquipment() → EQUIPMENT_DB(実在型式)
+  → buildEquipmentSchedule() → 帳票 / 画面 / 印刷 / CSV
+```
+
+- `detailed-building.mjs` の `computeDetailedProject` が、算定した必要能力を
+  **既存 `selectEquipment()` にそのまま渡す**(`equipmentSelection`)。
+  引数は `status` / `requiredCapacityKW` / `floors` / `basis` のみ。
+- `buildEquipmentSchedule(detailed, aggregate)` が建物全体行・系統別行・実在型式行を作る。
+  台数・設置容量・余裕率・選定理由文は `selectEquipment()` の戻り値をそのまま使う。
+- 系統別の選定も同じ `selectEquipment()` を系統集計の必要能力に当てるだけ。
+- `EQUIPMENT_DB` は 5.6kW / 8.0kW クラスのみ。他のクラスは
+  「この容量クラスの実在型式は今回未調査です」と明示し、**型式を創作しない**。
+- テスト: `stabro-detailed-ui.test.mjs`(72件)、E2E `21`。
+  「詳細方式の選定 = 既存 `selectEquipment()` の同一必要能力での選定」を機械的に照合している。
+
 ### STABRO互換マトリクスの残存FAIL(ブロッカー)
 
 `docs/STABRO-COMPATIBILITY-MATRIX.md` の残り11件はすべて
