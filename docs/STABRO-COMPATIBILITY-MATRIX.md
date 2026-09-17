@@ -153,11 +153,11 @@ STABRO項目 → UI入力 → データモデル → engine変数 → 係数 →
 ## 5. 検証(実測)
 
 ```
-npm test  → 57件 + 57件(core-lock) + export-csv + project-storage + ui-validation
-            + project-model + weather + 62件(因果) + 26件(集計) + 39件(レポート) = すべて成功
+npm test  → 57件 + 62件(因果) + 26件(集計) + 42件(レポート) + 72件(詳細方式 建物集計・帳票接続)
+            + core-lock / export-csv / project-storage / ui-validation / project-model / weather = すべて成功
 npm run check:sync → 一致(283行)・既存SHARED-LOGICは無変更
 npm run build      → 成功
-E2E(Playwright)    → 42 passed
+E2E(Playwright)    → 46 passed
 
 既存COREの不変確認(commit 93dacbf のエンジンと数値比較):
   computeLoad 完全一致: true / selectEquipment 完全一致: true
@@ -189,7 +189,7 @@ E2E(Playwright)    → 42 passed
 
 | 判定項目 | 結果 |
 |---|---|
-| 項目一致 | **PASS 8 / FAIL 5**(冷房8項目中 PASS 5・FAIL 3、暖房5項目中 PASS 2・FAIL 3) |
+| 項目一致 | **PASS 5 / FAIL 8**(冷房8項目中 PASS 4・FAIL 4、暖房5項目中 PASS 1・FAIL 4) |
 | 個数一致 | **PASS**(冷房8・暖房5の個数を保持) |
 | 順序一致 | **PASS**(公的基準の順序そのまま) |
 | 入力接続 | **PASS**(62件の因果テスト) |
@@ -209,8 +209,8 @@ E2E(Playwright)    → 42 passed
 | 機器表(機器項目)出力 | **PASS**(建物全体・系統別・実在型式候補を帳票/画面/印刷/CSVへ接続。選定は既存ロジックのみ) |
 | 実在機器データの網羅 | **FAIL**(`EQUIPMENT_DB`は5.6kW/8.0kWクラスのみ。他クラスは「実在型式は今回未調査」と明示し、型式を創作しない) |
 | レポート出力項目一致 | **PASS**(17・18とも実装) |
-| 未実装 | **FAIL 8件残存**(§1のFAIL) |
-| 未確認 | **FAIL 残存**(§0-2の非公開データ) |
+| 未実装 | **FAIL 2件**(§1-1 #8・§1-2 #5 の「ダクト・配管・空気漏洩・送風機・ポンプ・間欠空調(蓄熱)」) |
+| 未確認(係数非公開) | **FAIL 残存**(§0-2の非公開データ。§1の残るFAIL 6件はこれに起因) |
 | 推測値 | **0**(未確認はnullのまま) |
 | ダミー値 | **0** |
 
