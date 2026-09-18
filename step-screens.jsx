@@ -34,10 +34,10 @@ const num = (v, digits = 1) => (Number.isFinite(Number(v)) ? Number(v).toFixed(d
 function RoomCard({ room, floorName, children }) {
   return (
     <div style={{ border: `1px solid ${T.line}` }}>
-      <div className="px-4 py-2 flex items-center gap-2" style={{ background: T.bg, borderBottom: `1px solid ${T.line}` }}>
-        <span className="text-[12px] font-semibold" style={{ color: T.navy }}>{room.name || "(室名未設定)"}</span>
+      <div className="px-4 py-2 flex items-center gap-2" style={{ background: T.panel, borderBottom: `1px solid ${T.line}` }}>
+        <span style={{ color: T.ink, fontSize: 12, fontWeight: 600 }}>{room.name || "(室名未設定)"}</span>
         <Tag tone="muted">{floorName}</Tag>
-        <span className="text-[11px]" style={{ color: T.gray }}>{num(room.floorArea)} m²</span>
+        <span className="tnum" style={{ color: T.grayLight, fontSize: 11 }}>{num(room.floorArea)} m²</span>
       </div>
       <div className="px-4 py-1">{children}</div>
     </div>
@@ -89,7 +89,7 @@ function BuildingStep({ project, actions, engine }) {
       <Field label="運転時間" hint="参考記録用。現行の計算方式では負荷に影響しません。">
         <div className="flex items-center gap-2">
           <TextInput value={project.operatingHours.start} onChange={(v) => actions.setField("operatingHours", { ...project.operatingHours, start: v })} width="w-20" placeholder="09:00" />
-          <span className="text-[12px]" style={{ color: T.gray }}>〜</span>
+          <span style={{ color: T.grayLight, fontSize: 12 }}>〜</span>
           <TextInput value={project.operatingHours.end} onChange={(v) => actions.setField("operatingHours", { ...project.operatingHours, end: v })} width="w-20" placeholder="18:00" />
         </div>
       </Field>
@@ -215,7 +215,7 @@ function ConditionsStep({ project, actions }) {
             <Field label="運転時間">
               <div className="flex items-center gap-2">
                 <TextInput value={room.operatingHours.start} onChange={(v) => actions.updateRoom(room.roomId, { operatingHours: { ...room.operatingHours, start: v } })} width="w-20" placeholder="09:00" />
-                <span className="text-[12px]" style={{ color: T.gray }}>〜</span>
+                <span style={{ color: T.grayLight, fontSize: 12 }}>〜</span>
                 <TextInput value={room.operatingHours.end} onChange={(v) => actions.updateRoom(room.roomId, { operatingHours: { ...room.operatingHours, end: v } })} width="w-20" placeholder="18:00" />
               </div>
             </Field>
@@ -299,7 +299,7 @@ function OutdoorAirStep({ project, actions, calc }) {
           return (
             <>
               <Field label="自動算出換気量" unit="m³/h" hint="在室人数 × 用途別原単位(計算エンジンによる算出値)">
-                <span className="text-[13px] font-mono tabular-nums w-28 text-right inline-block" style={{ color: T.ink }}>
+                <span className="tnum w-28 text-right inline-block" style={{ color: T.ink, fontSize: 13 }}>
                   {entry?.loadResult.status === "ok" ? Math.round(entry.loadResult.ventilationM3h).toLocaleString() : "―"}
                 </span>
               </Field>
@@ -322,7 +322,7 @@ function OutdoorAirStep({ project, actions, calc }) {
                     width="w-20"
                     placeholder="効率"
                   />
-                  <span className="text-[11px]" style={{ color: T.gray }}>%</span>
+                  <span style={{ color: T.grayLight, fontSize: 11 }}>%</span>
                 </div>
               </Field>
               <Field label="外部に面する扉">
@@ -354,11 +354,11 @@ function EnvelopeStep({ project, actions }) {
           <>
             <div className="py-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[12px] font-semibold" style={{ color: T.navy }}>外壁</span>
+                <span style={{ color: T.ink, fontSize: 12, fontWeight: 600 }}>外壁</span>
                 <Button size="sm" onClick={() => actions.updateRoom(room.roomId, { envelope: { ...room.envelope, walls: [...room.envelope.walls, createWall()] } })}>外壁を追加</Button>
               </div>
               {room.envelope.walls.length === 0 ? (
-                <p className="text-[11px]" style={{ color: T.grayLight }}>外壁が登録されていません。</p>
+                <p style={{ color: T.grayLight, fontSize: 11 }}>外壁が登録されていません。</p>
               ) : (
                 <Table head={[{ label: "方位" }, { label: "面積 (m²)", align: "right" }, { label: "U値 (W/m²・K)", align: "right" }, { label: "", align: "right" }]}>
                   {room.envelope.walls.map((wall, i) => (
@@ -381,11 +381,11 @@ function EnvelopeStep({ project, actions }) {
             </div>
             <div className="py-3" style={{ borderTop: `1px solid ${T.lineSoft}` }}>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[12px] font-semibold" style={{ color: T.navy }}>窓・開口部</span>
+                <span style={{ color: T.ink, fontSize: 12, fontWeight: 600 }}>窓・開口部</span>
                 <Button size="sm" onClick={() => actions.updateRoom(room.roomId, { windows: [...room.windows, createWindow()] })}>窓を追加</Button>
               </div>
               {room.windows.length === 0 ? (
-                <p className="text-[11px]" style={{ color: T.grayLight }}>窓が登録されていません。</p>
+                <p style={{ color: T.grayLight, fontSize: 11 }}>窓が登録されていません。</p>
               ) : (
                 <Table head={[{ label: "方位" }, { label: "面積 (m²)", align: "right" }, { label: "ガラス種別" }, { label: "日射遮蔽" }, { label: "", align: "right" }]}>
                   {room.windows.map((win, i) => (
@@ -439,7 +439,7 @@ function CalcStep({ project, calc, stepStatus, engine, onGoResult, onJump }) {
       </Panel>
 
       <Panel title="未実装・計算に反映されない項目" subtitle="現行の計算エンジンの適用範囲を明示します。">
-        <ul className="text-[12px] leading-relaxed" style={{ color: T.gray }}>
+        <ul className="leading-relaxed" style={{ color: T.gray, fontSize: 12 }}>
           <li>・外皮(外壁・屋根・床)の貫流熱負荷</li>
           <li>・窓の貫流熱・日射熱取得</li>
           <li>・照明・機器の内部発熱の個別積み上げ</li>
@@ -453,9 +453,9 @@ function CalcStep({ project, calc, stepStatus, engine, onGoResult, onJump }) {
 
       <Panel title="入力チェック">
         {blockers.length === 0 ? (
-          <p className="text-[12px]" style={{ color: T.ok }}>必須入力は充足しています。計算を実行できます。</p>
+          <p style={{ color: T.ok, fontSize: 12 }}>必須入力は充足しています。計算を実行できます。</p>
         ) : (
-          <ul className="text-[12px] leading-relaxed" style={{ color: T.danger }}>
+          <ul className="leading-relaxed" style={{ color: T.danger, fontSize: 12 }}>
             {blockers.map((issue) => <li key={issue}>⚠ {issue}</li>)}
           </ul>
         )}
@@ -530,7 +530,7 @@ function ResultStep({ project, calc, engine, onOpenReport }) {
       <Panel title="機器選定(建物全体)" subtitle="必要能力に対する容量クラス候補です。台/階は階数で均等配分した場合の1階あたり台数の目安です。">
         {selection.status === "ok" ? (
           <>
-            <div className="mb-3 text-[12px] leading-relaxed" style={{ color: T.gray }}>{selection.selectionReasonText}</div>
+            <div className="mb-3 leading-relaxed" style={{ color: T.ink2, fontSize: 12 }}>{selection.selectionReasonText}</div>
             <Table
               minWidth={620}
               head={[
@@ -555,7 +555,7 @@ function ResultStep({ project, calc, engine, onOpenReport }) {
             </Table>
             {selection.recommended.realModels.length > 0 && (
               <div className="mt-4">
-                <div className="text-[12px] font-semibold mb-2" style={{ color: T.navy }}>推奨クラスの実在機器候補</div>
+                <div className="mb-2" style={{ color: T.ink, fontSize: 12, fontWeight: 600 }}>推奨クラスの実在機器候補</div>
                 <Table head={[{ label: "メーカー" }, { label: "型式" }, { label: "室内機形状" }, { label: "電源" }]}>
                   {selection.recommended.realModels.map((m) => (
                     <tr key={m.model}>
@@ -570,7 +570,7 @@ function ResultStep({ project, calc, engine, onOpenReport }) {
             )}
           </>
         ) : (
-          <p className="text-[12px]" style={{ color: T.danger }}>{selection.reason}</p>
+          <p style={{ color: T.danger, fontSize: 12, lineHeight: 1.7 }}>{selection.reason}</p>
         )}
       </Panel>
     </div>

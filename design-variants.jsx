@@ -98,10 +98,10 @@ export function DesignBHeader({ projectName, screen, onNavigate, onSave, saveDis
   ];
   return (
     <header className="no-print bg-white" style={{ borderBottom: `1px solid ${T.line}` }}>
-      <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center justify-between gap-4">
+      <div className="px-4 md:px-6 flex items-center justify-between gap-4" style={{ maxWidth: 1400, margin: "0 auto", minHeight: 56 }}>
         <div className="min-w-0">
-          <div className="text-[15px] font-semibold" style={{ color: T.navy }}>空調負荷計算</div>
-          <div className="text-[11px] truncate" style={{ color: T.gray }}>{projectName}</div>
+          <div className="title-tight truncate-safe" style={{ color: T.ink, fontSize: 15 }}>空調負荷計算</div>
+          <div className="truncate-safe" style={{ color: T.grayLight, fontSize: 11 }}>{projectName || "案件未設定"}</div>
         </div>
         <nav className="flex items-center gap-1">
           {tabs.map((tab) => (
@@ -109,9 +109,10 @@ export function DesignBHeader({ projectName, screen, onNavigate, onSave, saveDis
               key={tab.id}
               type="button"
               onClick={() => onNavigate(tab.id)}
-              className="px-3 py-1.5 text-[12px]"
+              className="ui-tab px-3 py-1.5"
               style={{
-                color: screen === tab.id ? T.navy : T.gray,
+                color: screen === tab.id ? T.ink : T.gray,
+                fontSize: 12,
                 fontWeight: screen === tab.id ? 600 : 400,
                 borderBottom: screen === tab.id ? `2px solid ${T.navy}` : "2px solid transparent",
               }}
@@ -135,23 +136,30 @@ function DesignBStageTabs({ step, stepStatus, onSelect }) {
       {B_STAGES.map((stage) => {
         const on = stage.id === active;
         const doneCount = stage.steps.filter((s) => stepStatus[s]?.done).length;
+        const complete = doneCount === stage.steps.length;
         return (
           <button
             key={stage.id}
             type="button"
             onClick={() => onSelect(stage.steps[0])}
-            className="text-left px-3.5 py-2 flex-1 min-w-[130px]"
+            className="ui-tab text-left px-3.5 py-2.5 flex-1 min-w-[130px]"
             style={{
-              background: on ? T.navy : "#FFFFFF",
+              background: on ? T.accentWash : "#FFFFFF",
               border: `1px solid ${on ? T.navy : T.line}`,
-              borderTop: on ? `3px solid ${T.navy}` : `3px solid ${T.line}`,
+              borderTop: `2px solid ${on ? T.navy : T.line}`,
+              borderRadius: 2,
             }}
           >
-            <div className="text-[12px] font-semibold" style={{ color: on ? "#FFFFFF" : T.navy }}>
-              {stage.label}
+            <div className="flex items-baseline justify-between gap-2">
+              <span style={{ color: on ? T.navy : T.ink2, fontSize: 12, fontWeight: on ? 600 : 500 }}>
+                {stage.label}
+              </span>
+              <span className="tnum" style={{ color: complete ? T.ok : T.grayLight, fontSize: 10 }}>
+                {doneCount}/{stage.steps.length}
+              </span>
             </div>
-            <div className="text-[10px] mt-0.5" style={{ color: on ? "#C9D8EA" : T.grayLight }}>
-              {stage.note} ・ {doneCount}/{stage.steps.length}
+            <div className="mt-1 truncate-safe" style={{ color: T.grayLight, fontSize: 10 }}>
+              {stage.note}
             </div>
           </button>
         );
@@ -176,23 +184,29 @@ function DesignBStepStrip({ step, stepStatus, onSelect }) {
               data-testid={`step-nav-${s.id}`}
               aria-label={`ステップ${s.no} ${s.label}`}
               onClick={() => onSelect(s.id)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 shrink-0"
+              className="ui-tab flex items-center gap-1.5 px-2.5 shrink-0"
               style={{
-                background: on ? T.blueSoft : "#FFFFFF",
+                background: on ? T.accentWash : "#FFFFFF",
                 border: `1px solid ${on ? T.navy : T.line}`,
+                borderRadius: 2,
+                minHeight: 36,
               }}
             >
               <span
-                className="text-[10px] font-mono w-4 h-4 flex items-center justify-center"
+                className="tnum flex items-center justify-center"
                 style={{
-                  color: done ? "#FFFFFF" : T.gray,
+                  fontSize: 10,
+                  width: 16,
+                  height: 16,
+                  borderRadius: 2,
+                  color: done ? "#FFFFFF" : T.grayLight,
                   background: done ? T.navy : "#FFFFFF",
                   border: `1px solid ${done ? T.navy : T.line}`,
                 }}
               >
                 {s.no}
               </span>
-              <span className="text-[11px]" style={{ color: on ? T.navy : T.ink, fontWeight: on ? 600 : 400 }}>
+              <span style={{ color: on ? T.navy : T.ink2, fontSize: 11, fontWeight: on ? 600 : 400 }}>
                 {s.label}
               </span>
             </button>
@@ -210,7 +224,7 @@ export function SecondaryInformation({ regionId }) {
     <div className="flex flex-col gap-4">
       <WeatherPanel regionId={regionId} />
       <Panel title="計算エンジンの適用範囲">
-        <ul className="text-[11px] leading-relaxed" style={{ color: T.gray }}>
+        <ul className="leading-relaxed" style={{ color: T.gray, fontSize: 11 }}>
           {ESTIMATE_NOTICES.map((notice) => <li key={notice}>・{notice}</li>)}
         </ul>
       </Panel>
@@ -224,47 +238,59 @@ function DesignBStatus({ project, calc, stepStatus, regionId }) {
   return (
     <Panel title="いまの状態" subtitle="進捗・不足・主要な計算値">
       <div className="flex flex-wrap gap-1 mb-4">
-        {STEPS.map((s) => (
-          <span
-            key={s.id}
-            title={s.label}
-            className="text-[10px] px-1.5 py-0.5"
-            style={{
-              color: stepStatus[s.id]?.done ? "#FFFFFF" : T.grayLight,
-              background: stepStatus[s.id]?.done ? T.navy : "#FFFFFF",
-              border: `1px solid ${stepStatus[s.id]?.done ? T.navy : T.line}`,
-            }}
-          >
-            {s.no}
-          </span>
-        ))}
+        {STEPS.map((s) => {
+          const isDone = stepStatus[s.id]?.done;
+          return (
+            <span
+              key={s.id}
+              title={s.label}
+              className="tnum"
+              style={{
+                fontSize: 10,
+                width: 22,
+                height: 20,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 2,
+                color: isDone ? "#FFFFFF" : T.grayLight,
+                background: isDone ? T.navy : "#FFFFFF",
+                border: `1px solid ${isDone ? T.navy : T.line}`,
+              }}
+            >
+              {s.no}
+            </span>
+          );
+        })}
       </div>
 
-      <div className="text-[28px] leading-none font-mono tabular-nums" style={{ color: issues.length ? T.warn : T.ok }}>
-        {issues.length}
-        <span className="text-[11px] ml-1" style={{ color: T.gray }}>件の不足・要確認</span>
+      {/* 不足件数はこの画面で唯一「目を引く」必要がある数字。
+          それ以外を静かに保つことで、この1つが埋もれない。 */}
+      <div className="tnum leading-none" style={{ color: issues.length ? T.warn : T.ok }}>
+        <span style={{ fontSize: 30, fontWeight: 600, letterSpacing: "-0.02em" }}>{issues.length}</span>
+        <span style={{ fontSize: 11, marginLeft: 6, color: T.gray }}>件の不足・要確認</span>
       </div>
       {issues.length > 0 && (
-        <ul className="mt-3 flex flex-col gap-1">
+        <ul className="mt-3 flex flex-col gap-1.5">
           {issues.slice(0, 4).map((issue, i) => (
-            <li key={i} className="text-[10px] leading-snug" style={{ color: T.gray }}>・{issue}</li>
+            <li key={i} className="leading-snug" style={{ color: T.ink2, fontSize: 10.5 }}>・{issue}</li>
           ))}
         </ul>
       )}
 
       <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${T.lineSoft}` }}>
         {has ? (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             <Stat label="冷房" value={num(calc.totals.designLoadCoolingKW)} unit="kW" tone="cooling" />
             <Stat label="暖房" value={num(calc.totals.designLoadHeatingKW)} unit="kW" tone="heating" />
             <Stat label="選定基準" value={num(calc.totals.requiredCapacityKW)} unit="kW" />
           </div>
         ) : (
-          <p className="text-[11px]" style={{ color: T.grayLight }}>室の面積を入力すると計算値が出ます。</p>
+          <p style={{ color: T.grayLight, fontSize: 11 }}>室の面積を入力すると計算値が出ます。</p>
         )}
       </div>
 
-      <div className="mt-4 text-[10px] leading-relaxed" style={{ color: T.gray }}>
+      <div className="tnum mt-4 leading-relaxed" style={{ color: T.grayLight, fontSize: 10 }}>
         室 {project.rooms.length} / 室面積合計 {num(roomAreaTotal(project))} m² / 延床 {num(project.totalFloorArea)} m²
       </div>
     </Panel>
@@ -282,6 +308,15 @@ export function DesignBEditor(props) {
 
   return (
     <div className="min-w-0" data-testid="step-editor">
+      {/* 現在地。長い画面をスクロールしても「今どこにいるか」を失わないよう、
+          工程番号・名称・段を1行にまとめて先頭に固定する。 */}
+      <div className="mb-3 flex items-baseline gap-2 flex-wrap">
+        <span className="label-micro">{stage.label}</span>
+        <span className="tnum" style={{ color: T.ink, fontSize: 13, fontWeight: 600 }}>
+          {STEPS[index]?.no} / {STEPS.length}
+        </span>
+        <span style={{ color: T.ink2, fontSize: 13 }}>{STEPS[index]?.label}</span>
+      </div>
       <DesignBStageTabs step={step} stepStatus={stepStatus} onSelect={onJump} />
       <DesignBStepStrip step={step} stepStatus={stepStatus} onSelect={onJump} />
       <StepEditor {...props} />
@@ -322,8 +357,8 @@ export function DesignCHeader({ projectName, screen, onNavigate, onSave, saveDis
     <header className="no-print" style={{ background: "#FFFFFF", borderBottom: `1px solid ${T.line}` }}>
       <div className="px-4 py-2.5 flex items-center justify-between gap-3">
         <div className="flex items-baseline gap-3 min-w-0">
-          <span className="text-[14px] font-semibold" style={{ color: T.navy }}>空調負荷計算</span>
-          <span className="text-[11px] truncate" style={{ color: T.gray }}>{projectName}</span>
+          <span className="title-tight truncate-safe" style={{ color: T.ink, fontSize: 14 }}>空調負荷計算</span>
+          <span className="truncate-safe" style={{ color: T.grayLight, fontSize: 11 }}>{projectName || "案件未設定"}</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {[["home", "ホーム"], ["projects", "案件一覧"], ["workspace", "入力"], ["report", "レポート"]].map(([id, label]) => (
@@ -331,11 +366,13 @@ export function DesignCHeader({ projectName, screen, onNavigate, onSave, saveDis
               key={id}
               type="button"
               onClick={() => onNavigate(id)}
-              className="px-2.5 py-1 text-[11px]"
+              className="ui-tab px-2.5 py-1"
               style={{
-                color: screen === id ? "#FFFFFF" : T.ink,
+                color: screen === id ? "#FFFFFF" : T.ink2,
                 background: screen === id ? T.navy : "#FFFFFF",
                 border: `1px solid ${screen === id ? T.navy : T.line}`,
+                fontSize: 11,
+                borderRadius: 2,
               }}
             >
               {label}
@@ -365,11 +402,13 @@ export function DesignCBar({ project, calc, step, stepStatus, onJump, onGoResult
               type="button"
               data-testid={`step-nav-${s.id}`}
               onClick={() => { onJump(s.id); setOpen(false); }}
-              className="text-[11px] px-2.5 py-1"
+              className="ui-tab px-2.5 py-1"
               style={{
-                background: s.id === step ? T.blueSoft : "#FFFFFF",
-                color: T.navy,
+                background: s.id === step ? T.accentWash : "#FFFFFF",
+                color: T.ink2,
                 border: `1px solid ${s.id === step ? T.navy : T.line}`,
+                fontSize: 11,
+                borderRadius: 2,
               }}
             >
               {s.no}. {s.label}
@@ -382,21 +421,21 @@ export function DesignCBar({ project, calc, step, stepStatus, onJump, onGoResult
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="text-[11px] px-2.5 py-1.5 shrink-0"
-            style={{ border: `1px solid ${T.line}`, color: T.navy, background: "#FFFFFF" }}
+            className="ui-tab px-2.5 py-1.5 shrink-0"
+            style={{ border: `1px solid ${T.lineStrong}`, color: T.ink2, background: "#FFFFFF", fontSize: 11, borderRadius: 2 }}
           >
             {open ? "閉じる" : "全ステップ"}
           </button>
-          <span className="text-[12px] truncate" style={{ color: T.ink }}>
-            <span className="font-mono mr-1.5" style={{ color: T.navy }}>{current?.no}/10</span>
+          <span className="truncate-safe" style={{ color: T.ink, fontSize: 12 }}>
+            <span className="tnum" style={{ color: T.grayLight, marginRight: 6 }}>{current?.no}/10</span>
             {current?.label}
           </span>
           {issues > 0 && (
-            <span className="text-[11px] shrink-0" style={{ color: T.warn }}>不足 {issues}件</span>
+            <span className="tnum shrink-0" style={{ color: T.warn, fontSize: 11 }}>不足 {issues}件</span>
           )}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-[11px] font-mono tabular-nums" style={{ color: T.gray }}>
+          <span className="tnum" style={{ color: T.grayLight, fontSize: 11 }}>
             {has ? `冷房 ${num(calc.totals.designLoadCoolingKW)} / 暖房 ${num(calc.totals.designLoadHeatingKW)} kW` : "未計算"}
           </span>
           {index > 0 && <Button size="sm" onClick={() => onJump(STEPS[index - 1].id)}>前へ</Button>}

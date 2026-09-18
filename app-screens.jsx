@@ -29,29 +29,34 @@ export function AppHeader({ projectName, screen, onNavigate, onSave, saveDisable
     { id: "report", label: "レポート" },
   ];
   return (
-    <header className="no-print" style={{ background: T.navyDeep }}>
-      <div className="px-6 py-3 flex items-center justify-between gap-6">
-        <div className="flex items-baseline gap-3">
-          <span className="text-[15px] font-semibold tracking-wide text-white">空調負荷計算 / 機器選定</span>
-          <span className="text-[11px]" style={{ color: "#9DB2C9" }}>{projectName || "―"}</span>
+    <header className="no-print bg-white" style={{ borderBottom: `1px solid ${T.line}` }}>
+      <div className="px-6 flex items-center justify-between gap-6" style={{ maxWidth: 1440, margin: "0 auto", minHeight: 56 }}>
+        <div className="flex items-baseline gap-3 min-w-0">
+          <span className="title-tight truncate-safe" style={{ color: T.ink, fontSize: 15 }}>
+            空調負荷計算
+            <span style={{ color: T.grayLight, fontWeight: 400, marginLeft: 6, fontSize: 12 }}>/ 機器選定</span>
+          </span>
+          <span className="truncate-safe" style={{ color: T.grayLight, fontSize: 11 }}>{projectName || "―"}</span>
         </div>
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-1 shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => onNavigate(tab.id)}
-              className="px-3 py-1.5 text-[12px]"
+              className="ui-tab px-3 py-1.5"
               style={{
-                color: screen === tab.id ? "#FFFFFF" : "#9DB2C9",
-                borderBottom: screen === tab.id ? `2px solid ${T.blue}` : "2px solid transparent",
+                color: screen === tab.id ? T.ink : T.gray,
+                fontSize: 12,
+                fontWeight: screen === tab.id ? 600 : 400,
+                borderBottom: screen === tab.id ? `2px solid ${T.navy}` : "2px solid transparent",
               }}
             >
               {tab.label}
             </button>
           ))}
           <div className="ml-3">
-            <Button variant="accent" size="sm" onClick={onSave} disabled={saveDisabled}>案件を保存</Button>
+            <Button variant="primary" size="sm" onClick={onSave} disabled={saveDisabled}>案件を保存</Button>
           </div>
         </nav>
       </div>
@@ -73,28 +78,28 @@ export function StepNav({ current, stepStatus, onSelect }) {
   };
 
   return (
-    <nav className="bg-white" style={{ border: `1px solid ${T.line}` }}>
+    <nav className="bg-white" style={{ border: `1px solid ${T.line}`, borderRadius: 2 }}>
       <div className="px-4 py-3" style={{ borderBottom: `1px solid ${T.lineSoft}` }}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[12px] font-semibold" style={{ color: T.navy }}>入力ステップ</div>
-            <div className="text-[11px]" style={{ color: T.gray }}>
-              {doneCount} / {STEPS.length} 完了
+            <div className="label-micro">入力ステップ</div>
+            <div className="tnum mt-1" style={{ color: T.gray, fontSize: 11 }}>
+              <span style={{ color: T.ink, fontWeight: 600 }}>{doneCount}</span> / {STEPS.length} 完了
             </div>
           </div>
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="lg:hidden shrink-0 px-3 py-1.5 text-[12px]"
-            style={{ border: `1px solid ${T.line}`, color: T.navy, background: "#FFFFFF" }}
+            className="ui-tab lg:hidden shrink-0 px-3 py-1.5"
+            style={{ border: `1px solid ${T.lineStrong}`, color: T.ink2, background: "#FFFFFF", fontSize: 12, borderRadius: 2 }}
             aria-expanded={open}
           >
             {open ? "一覧を閉じる" : "ステップ一覧"}
           </button>
         </div>
         {!open && (
-          <div className="lg:hidden mt-2 text-[12px]" style={{ color: T.ink }}>
-            <span className="font-mono mr-1.5" style={{ color: T.navy }}>{currentStep?.no}.</span>
+          <div className="lg:hidden mt-2 flex items-center gap-1.5" style={{ color: T.ink, fontSize: 12 }}>
+            <span className="tnum" style={{ color: T.navy, fontWeight: 600 }}>{currentStep?.no}.</span>
             {currentStep?.label}
           </div>
         )}
@@ -109,17 +114,21 @@ export function StepNav({ current, stepStatus, onSelect }) {
                 type="button"
                 data-testid={`step-nav-${step.id}`}
                 onClick={() => handleSelect(step.id)}
-                className="w-full text-left px-4 py-2.5 flex items-start gap-3"
+                className="ui-tab w-full text-left px-4 py-2.5 flex items-start gap-3"
                 style={{
-                  background: active ? T.blueSoft : "transparent",
-                  borderLeft: active ? `3px solid ${T.navy}` : "3px solid transparent",
+                  background: active ? T.accentWash : "transparent",
+                  borderLeft: active ? `2px solid ${T.navy}` : "2px solid transparent",
                   borderBottom: `1px solid ${T.lineSoft}`,
                 }}
               >
                 <span
-                  className="text-[11px] font-mono w-5 h-5 flex items-center justify-center shrink-0 mt-0.5"
+                  className="tnum shrink-0 mt-0.5 flex items-center justify-center"
                   style={{
-                    color: status.done ? "#FFFFFF" : T.gray,
+                    fontSize: 11,
+                    width: 20,
+                    height: 20,
+                    borderRadius: 2,
+                    color: status.done ? "#FFFFFF" : T.grayLight,
                     background: status.done ? T.navy : "#FFFFFF",
                     border: `1px solid ${status.done ? T.navy : T.line}`,
                   }}
@@ -127,11 +136,13 @@ export function StepNav({ current, stepStatus, onSelect }) {
                   {step.no}
                 </span>
                 <span className="min-w-0">
-                  <span className="text-[12px] block" style={{ color: active ? T.navy : T.ink, fontWeight: active ? 600 : 400 }}>
+                  <span className="block" style={{ fontSize: 12, color: active ? T.ink : T.ink2, fontWeight: active ? 600 : 400 }}>
                     {step.label}
-                    {status.optional && !status.done && <span className="ml-1.5 text-[10px]" style={{ color: T.grayLight }}>任意</span>}
+                    {status.optional && !status.done && (
+                      <span className="label-micro" style={{ marginLeft: 6 }}>任意</span>
+                    )}
                   </span>
-                  <span className="text-[10px] block leading-snug" style={{ color: T.grayLight }}>{step.note}</span>
+                  <span className="block leading-snug mt-0.5" style={{ color: T.grayLight, fontSize: 10.5 }}>{step.note}</span>
                 </span>
               </button>
             </li>
@@ -145,50 +156,62 @@ export function StepNav({ current, stepStatus, onSelect }) {
 export function StatusPanel({ project, calc, stepStatus, regionId }) {
   const issues = STEPS.flatMap((step) => (stepStatus[step.id]?.issues || []).map((issue) => ({ step, issue })));
   const done = STEPS.filter((s) => stepStatus[s.id]?.done).length;
+  const has = calc && calc.totals.validRoomCount > 0;
   return (
     <div className="flex flex-col gap-4">
       <Panel title="進捗" subtitle={`${done} / ${STEPS.length} ステップ完了`}>
+        {/* 10工程の完了状態を1行で照合できるようにする。数字だけの最小表現。 */}
         <div className="flex flex-wrap gap-1">
-          {STEPS.map((step) => (
-            <span
-              key={step.id}
-              title={step.label}
-              className="text-[10px] px-1.5 py-0.5"
-              style={{
-                color: stepStatus[step.id]?.done ? "#FFFFFF" : T.grayLight,
-                background: stepStatus[step.id]?.done ? T.navy : "#FFFFFF",
-                border: `1px solid ${stepStatus[step.id]?.done ? T.navy : T.line}`,
-              }}
-            >
-              {step.no}
-            </span>
-          ))}
+          {STEPS.map((step) => {
+            const isDone = stepStatus[step.id]?.done;
+            return (
+              <span
+                key={step.id}
+                title={step.label}
+                className="tnum"
+                style={{
+                  fontSize: 10,
+                  width: 22,
+                  height: 20,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 2,
+                  color: isDone ? "#FFFFFF" : T.grayLight,
+                  background: isDone ? T.navy : "#FFFFFF",
+                  border: `1px solid ${isDone ? T.navy : T.line}`,
+                }}
+              >
+                {step.no}
+              </span>
+            );
+          })}
         </div>
       </Panel>
 
       <Panel title="現在の計算結果">
-        {calc && calc.totals.validRoomCount > 0 ? (
-          <div className="grid grid-cols-2 gap-4">
+        {has ? (
+          <div className="grid grid-cols-2 gap-x-5 gap-y-4">
             <Stat label="冷房" value={num(calc.totals.designLoadCoolingKW)} unit="kW" tone="cooling" />
             <Stat label="暖房" value={num(calc.totals.designLoadHeatingKW)} unit="kW" tone="heating" />
             <Stat label="選定基準" value={num(calc.totals.requiredCapacityKW)} unit="kW" />
             <Stat label="換気量" value={Math.round(calc.totals.ventilationM3h).toLocaleString()} unit="m³/h" tone="blue" />
           </div>
         ) : (
-          <p className="text-[12px]" style={{ color: T.grayLight }}>室の面積を入力すると計算結果が表示されます。</p>
+          <p style={{ color: T.grayLight, fontSize: 12 }}>室の面積を入力すると計算結果が表示されます。</p>
         )}
-        <div className="mt-3 text-[11px] leading-relaxed" style={{ color: T.gray }}>
+        <div className="tnum mt-3 leading-relaxed" style={{ color: T.grayLight, fontSize: 11 }}>
           室数 {project.rooms.length} 室 / 室面積合計 {num(roomAreaTotal(project))} m² / 延床面積 {num(project.totalFloorArea)} m²
         </div>
       </Panel>
 
       <Panel title="入力不足・要確認" subtitle={issues.length ? `${issues.length}件` : "指摘なし"}>
         {issues.length === 0 ? (
-          <p className="text-[12px]" style={{ color: T.ok }}>必須項目の未入力はありません。</p>
+          <p style={{ color: T.ok, fontSize: 12 }}>必須項目の未入力はありません。</p>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-2.5">
             {issues.slice(0, 12).map(({ step, issue }, i) => (
-              <li key={`${step.id}-${i}`} className="text-[11px] leading-relaxed flex gap-2" style={{ color: T.gray }}>
+              <li key={`${step.id}-${i}`} className="flex gap-2 leading-relaxed" style={{ color: T.ink2, fontSize: 11 }}>
                 <Tag tone="muted">{step.no}. {step.label}</Tag>
                 <span>{issue}</span>
               </li>
@@ -201,7 +224,7 @@ export function StatusPanel({ project, calc, stepStatus, regionId }) {
         <Panel title="計算エンジンからの警告">
           <ul className="flex flex-col gap-1.5">
             {calc.warnings.slice(0, 10).map((w, i) => (
-              <li key={i} className="text-[11px] leading-relaxed" style={{ color: T.warn }}>⚠ {w}</li>
+              <li key={i} className="leading-relaxed" style={{ color: T.warn, fontSize: 11 }}>⚠ {w}</li>
             ))}
           </ul>
         </Panel>
@@ -210,7 +233,7 @@ export function StatusPanel({ project, calc, stepStatus, regionId }) {
       <WeatherPanel regionId={regionId} />
 
       <Panel title="計算エンジンの適用範囲">
-        <ul className="text-[11px] leading-relaxed" style={{ color: T.gray }}>
+        <ul className="leading-relaxed" style={{ color: T.gray, fontSize: 11 }}>
           {ESTIMATE_NOTICES.map((notice) => <li key={notice}>・{notice}</li>)}
         </ul>
       </Panel>
@@ -232,28 +255,36 @@ export function WeatherPanel({ regionId }) {
 
   return (
     <Panel title="現場周辺の天気予報" subtitle={`${state.city}(地域区分の代表都市) / 施工計画の参考情報`}>
-      {state.status === "loading" && <p className="text-[12px]" style={{ color: T.grayLight }}>取得中…</p>}
+      {state.status === "loading" && <p style={{ color: T.grayLight, fontSize: 12 }}>取得中…</p>}
       {state.status === "error" && (
-        <p className="text-[11px]" style={{ color: T.warn }}>天気予報を取得できませんでした（{state.error}）。計算結果には影響しません。</p>
+        <p style={{ color: T.warn, fontSize: 11, lineHeight: 1.7 }}>
+          天気予報を取得できませんでした（{state.error}）。計算結果には影響しません。
+        </p>
       )}
       {state.status === "ok" && (
-        <div className="flex flex-col gap-1.5">
-          {state.days.map((day) => (
-            <div key={day.date} className="flex items-center justify-between text-[12px]" style={{ color: T.ink }}>
-              <span className="w-20" style={{ color: T.gray }}>{formatForecastDate(day.date)}</span>
-              <span className="flex-1">{day.label}</span>
-              <span className="font-mono tabular-nums">
+        <div className="flex flex-col">
+          {state.days.map((day, i) => (
+            <div
+              key={day.date}
+              className="flex items-center justify-between gap-2 py-1.5"
+              style={{ borderTop: i === 0 ? "none" : `1px solid ${T.lineSoft}`, fontSize: 12, color: T.ink }}
+            >
+              <span className="tnum shrink-0" style={{ color: T.grayLight, width: 68, fontSize: 11 }}>
+                {formatForecastDate(day.date)}
+              </span>
+              <span className="flex-1 truncate-safe" style={{ color: T.ink2 }}>{day.label}</span>
+              <span className="tnum shrink-0">
                 <span style={{ color: T.heating }}>{num(day.maxC)}</span>
                 <span style={{ color: T.grayLight }}> / </span>
                 <span style={{ color: T.cooling }}>{num(day.minC)}</span>
-                <span className="text-[10px]" style={{ color: T.gray }}> ℃</span>
+                <span style={{ color: T.grayLight, fontSize: 10 }}> ℃</span>
               </span>
-              <span className="w-12 text-right font-mono tabular-nums text-[11px]" style={{ color: T.blue }}>
+              <span className="tnum shrink-0 text-right" style={{ color: T.blue, fontSize: 11, width: 40 }}>
                 {day.precipitationProbability === null ? "―" : `${day.precipitationProbability}%`}
               </span>
             </div>
           ))}
-          <p className="text-[10px] mt-1" style={{ color: T.grayLight }}>
+          <p className="mt-2 leading-relaxed" style={{ color: T.grayLight, fontSize: 10 }}>
             出典: Open-Meteo。設計用外気条件ではなく、負荷計算には使用していません。
           </p>
         </div>
@@ -274,7 +305,11 @@ export function HomeScreen({ project, calc, savedProjects, regionId, onNewProjec
             <Button onClick={() => onNavigate("projects")}>案件一覧</Button>
             <Button onClick={onImport}>インポート</Button>
           </div>
-          <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-5">
+          {/* 主要4値を1行で照合できるようにする。ラベルは小さく、数字は大きく。 */}
+          <div
+            className="mt-6 pt-5 grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-5"
+            style={{ borderTop: `1px solid ${T.lineSoft}` }}
+          >
             <Stat label="編集中の案件" value={project.rooms.length} unit="室" sub={project.projectName} />
             <Stat label="冷房" value={calc ? num(calc.totals.designLoadCoolingKW) : "―"} unit="kW" tone="cooling" />
             <Stat label="暖房" value={calc ? num(calc.totals.designLoadHeatingKW) : "―"} unit="kW" tone="heating" />
@@ -290,7 +325,7 @@ export function HomeScreen({ project, calc, savedProjects, regionId, onNewProjec
               {recent.map((item) => (
                 <tr key={item.projectId}>
                   <Td>{item.projectName}</Td>
-                  <Td>{dateTime(item.updatedAt)}</Td>
+                  <Td mono>{dateTime(item.updatedAt)}</Td>
                   <Td align="right"><Button size="sm" onClick={() => onOpenProject(item.projectId)}>開く</Button></Td>
                 </tr>
               ))}
@@ -301,8 +336,13 @@ export function HomeScreen({ project, calc, savedProjects, regionId, onNewProjec
         <Panel title="入力の流れ">
           <ol className="grid grid-cols-2 md:grid-cols-5 gap-2">
             {STEPS.map((step) => (
-              <li key={step.id} className="px-2 py-2 text-[11px]" style={{ border: `1px solid ${T.line}`, color: T.ink }}>
-                <span className="font-mono" style={{ color: T.blue }}>{step.no}</span> {step.label}
+              <li
+                key={step.id}
+                className="flex items-baseline gap-1.5 px-2.5 py-2"
+                style={{ border: `1px solid ${T.line}`, color: T.ink2, fontSize: 11, borderRadius: 2 }}
+              >
+                <span className="tnum" style={{ color: T.grayLight, fontSize: 10 }}>{step.no}</span>
+                {step.label}
               </li>
             ))}
           </ol>
@@ -312,7 +352,7 @@ export function HomeScreen({ project, calc, savedProjects, regionId, onNewProjec
       <div className="flex flex-col gap-5">
         <WeatherPanel regionId={regionId} />
         <Panel title="このツールについて">
-          <ul className="text-[11px] leading-relaxed" style={{ color: T.gray }}>
+          <ul className="leading-relaxed" style={{ color: T.gray, fontSize: 11 }}>
             {ESTIMATE_NOTICES.map((notice) => <li key={notice}>・{notice}</li>)}
           </ul>
         </Panel>
@@ -339,13 +379,13 @@ export function ProjectListScreen({ savedProjects, currentProjectId, onOpenProje
       ) : (
         <Table head={[{ label: "案件名" }, { label: "作成日時" }, { label: "更新日時" }, { label: "", align: "right" }]}>
           {savedProjects.map((item) => (
-            <tr key={item.projectId} style={item.projectId === currentProjectId ? { background: T.blueSoft } : undefined}>
+            <tr key={item.projectId} style={item.projectId === currentProjectId ? { background: T.accentWash } : undefined}>
               <Td>
                 {item.projectName}
-                {item.projectId === currentProjectId && <span className="ml-2"><Tag tone="navy">編集中</Tag></span>}
+                {item.projectId === currentProjectId && <span style={{ marginLeft: 8 }}><Tag tone="navy">編集中</Tag></span>}
               </Td>
-              <Td>{dateTime(item.createdAt)}</Td>
-              <Td>{dateTime(item.updatedAt)}</Td>
+              <Td mono>{dateTime(item.createdAt)}</Td>
+              <Td mono>{dateTime(item.updatedAt)}</Td>
               <Td align="right">
                 <div className="flex justify-end gap-1">
                   <Button size="sm" variant="accent" onClick={() => onOpenProject(item.projectId)}>開く</Button>
@@ -427,16 +467,16 @@ export function ReportScreen({ project, calc, report, onDownloadCsv, onPrint, on
 
       <Panel title="警告・要確認">
         {report.warnings.length === 0 ? (
-          <p className="text-[12px]" style={{ color: T.ok }}>警告はありません。</p>
+          <p style={{ color: T.ok, fontSize: 12 }}>警告はありません。</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
-            {report.warnings.map((w, i) => <li key={i} className="text-[11px]" style={{ color: T.warn }}>⚠ {w}</li>)}
+            {report.warnings.map((w, i) => <li key={i} style={{ color: T.warn, fontSize: 11, lineHeight: 1.7 }}>⚠ {w}</li>)}
           </ul>
         )}
       </Panel>
 
       <Panel title="注意事項">
-        <ul className="text-[11px] leading-relaxed" style={{ color: T.gray }}>
+        <ul className="leading-relaxed" style={{ color: T.gray, fontSize: 11 }}>
           {report.notices.map((notice) => <li key={notice}>・{notice}</li>)}
         </ul>
       </Panel>

@@ -612,7 +612,7 @@ function HVACCalculatorInner() {
 
       <input ref={fileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={handleImportFile} />
 
-      <main className="no-print px-6 py-5 max-w-[1400px] mx-auto">
+      <main className="no-print px-4 md:px-6 py-5 mx-auto" style={{ maxWidth: 1400 }}>
         {message && (
           <div className="mb-4">
             <Note tone={message.tone === "danger" ? "danger" : message.tone === "ok" ? "ok" : "info"}>{message.text}</Note>
