@@ -293,21 +293,42 @@ export function WeatherPanel({ regionId }) {
   );
 }
 
-export function HomeScreen({ project, calc, savedProjects, regionId, onNewProject, onOpenProject, onImport, onNavigate }) {
+export function HomeScreen({ project, calc, savedProjects, regionId, stepStatus, onNewProject, onOpenProject, onImport, onNavigate, onOpenStep }) {
   const recent = savedProjects.slice(0, 5);
+  const doneCount = stepStatus ? STEPS.filter((s) => stepStatus[s.id]?.done).length : 0;
+  const isFresh = project.rooms.length === 0;
+  // 初見の人が最初に押すべきボタンは状況で変わる。
+  // 何も作っていなければ「新規案件」、作成中なら「入力を続ける」を主ボタンにする。
+  const primary = isFresh
+    ? { label: "新規案件", run: onNewProject }
+    : { label: "入力を続ける", run: () => onNavigate("workspace") };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <div className="lg:col-span-2 flex flex-col gap-5">
-        <Panel title="はじめる" subtitle="案件を作成して、建物 → 階 → 室の順に入力します。" tone="accent">
-          <div className="flex flex-wrap gap-2">
-            <Button variant="primary" onClick={onNewProject}>新規案件</Button>
-            <Button onClick={() => onNavigate("workspace")}>入力を続ける</Button>
+        <Panel title="はじめる" subtitle="案件を作成し、建物 → 階 → 室 の順に入力します。" tone="accent">
+          {/* 今の状態と、次にやることを1行で示す。初見でも迷わないことを優先する。 */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <Button variant="primary" onClick={primary.run}>{primary.label}</Button>
+            {/* 入力中は「新規案件」を主ボタンにしない(作業中の案件を捨てる操作のため) */}
+            {!isFresh && <Button onClick={onNewProject}>新規案件</Button>}
             <Button onClick={() => onNavigate("projects")}>案件一覧</Button>
             <Button onClick={onImport}>インポート</Button>
           </div>
-          {/* 主要4値を1行で照合できるようにする。ラベルは小さく、数字は大きく。 */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1" style={{ fontSize: 12 }}>
+            <span style={{ color: T.gray }}>
+              現在の案件: <span style={{ color: T.ink, fontWeight: 600 }}>{project.projectName || "名称未設定の案件"}</span>
+            </span>
+            <span style={{ color: T.gray }}>
+              入力の進み具合:{" "}
+              <span className="tnum" style={{ color: T.ink, fontWeight: 600 }}>
+                {doneCount} / {STEPS.length}
+              </span>
+            </span>
+          </div>
+
           <div
-            className="mt-6 pt-5 grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-5"
+            className="mt-5 pt-5 grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-5"
             style={{ borderTop: `1px solid ${T.lineSoft}` }}
           >
             <Stat label="編集中の案件" value={project.rooms.length} unit="室" sub={project.projectName} />
@@ -333,18 +354,37 @@ export function HomeScreen({ project, calc, savedProjects, regionId, onNewProjec
           )}
         </Panel>
 
-        <Panel title="入力の流れ">
+        <Panel title="入力の流れ" subtitle="工程を選ぶとその入力画面を開きます。完了した工程にはしるしが付きます。">
           <ol className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            {STEPS.map((step) => (
-              <li
-                key={step.id}
-                className="flex items-baseline gap-1.5 px-2.5 py-2"
-                style={{ border: `1px solid ${T.line}`, color: T.ink2, fontSize: 11, borderRadius: 2 }}
-              >
-                <span className="tnum" style={{ color: T.grayLight, fontSize: 10 }}>{step.no}</span>
-                {step.label}
-              </li>
-            ))}
+            {STEPS.map((step) => {
+              const done = !!stepStatus?.[step.id]?.done;
+              return (
+                <li key={step.id}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenStep(step.id)}
+                    className="ui-tab w-full h-full text-left flex items-start gap-1.5 px-2.5 py-2"
+                    style={{
+                      border: `1px solid ${done ? T.ok : T.line}`,
+                      color: done ? T.ink : T.ink2,
+                      fontSize: 11,
+                      lineHeight: 1.45,
+                      borderRadius: 2,
+                      background: "#FFFFFF",
+                    }}
+                    title={`${step.no}. ${step.label} — ${step.note}`}
+                  >
+                    <span
+                      className="tnum shrink-0"
+                      style={{ color: done ? T.ok : T.gray, fontSize: 10, fontWeight: 600, minWidth: 12 }}
+                    >
+                      {done ? "✓" : step.no}
+                    </span>
+                    <span className="truncate-safe">{step.label}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ol>
         </Panel>
       </div>

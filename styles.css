@@ -81,12 +81,13 @@ body {
   font-feature-settings: "tnum" 1;
 }
 
-/* マイクロラベル: 小さく、字間を開けて使う。
-   本文と競合しないので「情報量が多いのに静か」を作れる。 */
+/* マイクロラベル: 小さな見出し。
+   日本語には大文字小文字が無いため uppercase は効かず、広い字間だけが残ると
+   「編集中の案件」等が間延びして読みにくくなる。字間は控えめにし、
+   サイズと色で本文と差をつける。 */
 .label-micro {
-  font-size: var(--fs-micro);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.02em;
   color: var(--ink-4);
   font-weight: 500;
 }

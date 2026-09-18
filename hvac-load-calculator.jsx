@@ -600,6 +600,12 @@ function HVACCalculatorInner() {
     setMessage(null);
   }
 
+  // ホームの工程チップから、その工程を開いた状態で入力画面へ移る。
+  function handleOpenStep(stepId) {
+    setStep(stepId);
+    handleNavigate("workspace");
+  }
+
   return (
     <div className="min-h-screen" style={{ background: T.bg, color: T.ink, fontFamily: "'Hiragino Kaku Gothic ProN','Noto Sans JP','Yu Gothic',sans-serif" }}>
       {variant === "B" ? (
@@ -625,10 +631,12 @@ function HVACCalculatorInner() {
             calc={calc}
             savedProjects={savedProjects}
             regionId={project.regionId}
+            stepStatus={stepStatus}
             onNewProject={handleNewProject}
             onOpenProject={handleOpenProject}
             onImport={handleImportClick}
             onNavigate={handleNavigate}
+            onOpenStep={handleOpenStep}
           />
         )}
 

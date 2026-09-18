@@ -16,7 +16,7 @@ export const T = {
   blueSoft: "#F2F6FA",
   ink: "#14161A",
   ink2: "#3D434C",
-  gray: "#6B7280",
+  gray: "#5B6672",
   grayLight: "#656E7C",
   line: "#E5E6E4",
   lineSoft: "#F0F1EF",
@@ -53,7 +53,7 @@ export function Panel({ title, subtitle, actions, children, tone = "default", de
         >
           <div className="min-w-0">
             {title && (
-              <h2 className="title-tight" style={{ color: T.ink, fontSize: 13, lineHeight: 1.4 }}>
+              <h2 className="title-tight" style={{ color: T.navy, fontSize: 13, lineHeight: 1.4 }}>
                 {title}
               </h2>
             )}
@@ -188,12 +188,12 @@ export function Checkbox({ checked, onChange, label }) {
 export function Button({ children, onClick, variant = "default", size = "md", disabled, title }) {
   const base = {
     primary: { background: T.navy, color: "#FFFFFF", border: `1px solid ${T.navy}` },
-    default: { background: "#FFFFFF", color: T.ink2, border: `1px solid ${T.lineStrong}` },
+    default: { background: "#FFFFFF", color: T.ink, border: `1px solid ${T.lineStrong}` },
     accent: { background: T.blue, color: "#FFFFFF", border: `1px solid ${T.blue}` },
     ghost: { background: "transparent", color: T.blue, border: "1px solid transparent" },
     danger: { background: "#FFFFFF", color: T.danger, border: `1px solid ${T.lineStrong}` },
   }[variant];
-  const pad = size === "sm" ? "px-2.5 py-1" : "px-3.5 py-1.5";
+  const pad = size === "sm" ? "px-3 py-1.5" : "px-3.5 py-2";
   const fs = size === "sm" ? 11 : 12;
   return (
     <button

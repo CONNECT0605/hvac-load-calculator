@@ -137,6 +137,31 @@ test.describe("UI品質(実測)", () => {
     await expect(page.getByRole("button", { name: "新規案件", exact: true }).first()).toBeVisible();
   });
 
+  test("ホームに現在の案件名と入力の進み具合が出ている", async ({ page }) => {
+    await gotoHome(page);
+    const text = await page.locator("main").innerText();
+    expect(text).toMatch(/現在の案件/);
+    expect(text).toMatch(/入力の進み具合/);
+    expect(text).toMatch(/\d+\s*\/\s*10/);
+  });
+
+  test("ホームの工程チップを押すとその工程が開く(現在地が一致する)", async ({ page }) => {
+    await gotoHome(page);
+    await page.getByRole("button", { name: /外皮/ }).first().click();
+    await expect(page.getByTestId("step-editor")).toBeVisible();
+    const text = await page.locator("main").innerText();
+    expect(text).toMatch(/8\s*\/\s*10/);
+  });
+
+  test("作成中の案件ではホームの主ボタンが「入力を続ける」になる", async ({ page }) => {
+    await newProject(page);
+    await page.getByRole("button", { name: "ホーム" }).first().click();
+    const main = page.locator("main");
+    const primary = main.locator('button[data-variant="primary"]').first();
+    await expect(primary).toBeVisible();
+    await expect(primary).toHaveText("入力を続ける");
+  });
+
   test("帳票画面の数値が等幅tabularで桁揃えされる", async ({ page }) => {
     await buildProject(page, { name: "桁揃え確認", area: 300, roomArea: 150 });
     await runCalc(page);
