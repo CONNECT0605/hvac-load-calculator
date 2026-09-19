@@ -1,0 +1,24 @@
+{
+  "name": "hvac-load-calculator",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "test": "node hvac-calc-engine.test.js && node core-lock.test.mjs && node export-csv.test.mjs && node project-storage.test.mjs && node ui-validation.test.mjs && node project-model.test.mjs && node weather.test.mjs && node stabro-compat.test.mjs && node stabro-aggregation.test.mjs && node stabro-report.test.mjs && node stabro-detailed-ui.test.mjs && node stabro-compat-56.test.mjs && node ui-consistency.test.mjs",
+    "test:e2e": "playwright test",
+    "verify:56": "playwright test --reporter=json > e2e-56-report.json 2>/dev/null; node verify-56.mjs e2e-56-report.json",
+    "check:sync": "node hvac-calc-engine.sync-check.js"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "5.2.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "vite": "7.3.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  }
+}
