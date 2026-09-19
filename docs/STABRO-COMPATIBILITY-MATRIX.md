@@ -97,7 +97,7 @@ STABRO項目 → UI入力 → データモデル → engine変数 → 係数 →
 
 | 段階 | 実装 | 状態 |
 |---|---|---|
-| UI入力 | `step-screens.jsx`(10ステップ) | **PASS**(E2E 42件) |
+| UI入力 | `step-screens.jsx`(10ステップ) | **PASS**(E2E `app.spec.mjs` 21件) |
 | データモデル | `project-model.mjs`(`Room.systemId`/`interiorWalls` 追加) | **PASS** |
 | engine変数 | `computeDetailedLoad()` | **PASS** |
 | 係数 | `R6_INTERNAL_LOAD`/`R6_DESIGN_OUTDOOR`/`SURFACE_RESISTANCE`(出典付き) | **PASS** |
@@ -157,11 +157,22 @@ npm test  → 57件 + 62件(因果) + 26件(集計) + 42件(レポート) + 72�
             + core-lock / export-csv / project-storage / ui-validation / project-model / weather = すべて成功
 npm run check:sync → 一致(283行)・既存SHARED-LOGICは無変更
 npm run build      → 成功
-E2E(Playwright)    → 46 passed
+E2E(Playwright)    → 56 passed(前回基準 022269a 時点: app 21 / design-matrix 11 / responsive 14 / ui-quality 10)
+                     ホーム画面改善で ui-quality に3件追加した現在は 59 passed
 
 既存COREの不変確認(commit 93dacbf のエンジンと数値比較):
   computeLoad 完全一致: true / selectEquipment 完全一致: true
 ```
+
+### 「STABRO互換56項目」の特定結果
+
+外部指示で使われる「STABRO互換56項目」には、本リポジトリ内に同名のリストが存在しない
+(全履歴・全ブランチ検索で0件)。実測で一致する唯一の集合は**前回基準コミット `022269a` 時点の
+E2Eテスト56件**である(app 21 / design-matrix 11 / responsive 14 / ui-quality 10)。
+`git worktree add` で `022269a` を分離して `playwright test --list` を実行し、
+56件であることを確認した。ホーム画面改善(`80adadf`)で ui-quality に3件追加した現在は 59件。
+
+したがって「56/56 PASS」は **E2E 56件のPASS** として検証可能である。
 
 因果テストで検証した入力接続(62項目): 外壁U/面積、屋根、床、内壁、材料構成(厚さ・λ)、
 窓面積/方位/SC、日射量、遮蔽、照明、機器、人員(顕熱/潜熱)、外気量/温度/湿度、

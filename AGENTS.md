@@ -177,7 +177,7 @@ Project → Floor → Room → roomToDetailedLoadInput → computeDetailedLoad
 - 系統別の選定も同じ `selectEquipment()` を系統集計の必要能力に当てるだけ。
 - `EQUIPMENT_DB` は 5.6kW / 8.0kW クラスのみ。他のクラスは
   「この容量クラスの実在型式は今回未調査です」と明示し、**型式を創作しない**。
-- テスト: `stabro-detailed-ui.test.mjs`(72件)、E2E `21`。
+- テスト: `stabro-detailed-ui.test.mjs`(72件)、E2E `21`(app.spec.mjs)。
   「詳細方式の選定 = 既存 `selectEquipment()` の同一必要能力での選定」を機械的に照合している。
 
 ### STABRO互換マトリクスの残存FAIL(ブロッカー)
@@ -195,9 +195,35 @@ Project → Floor → Room → roomToDetailedLoadInput → computeDetailedLoad
 - 機器: 必要能力→選定→機器表の接続は PASS。実在型式データの網羅のみ FAIL
   (`EQUIPMENT_DB` は 5.6/8.0kW クラスのみ)。
 
-**56項目という検証セットは本リポジトリのいかなる履歴にも存在しない**
-(git 全履歴・全ブランチを検索して 0 件)。実際の検証項目は上記のとおりで、
-負荷項目13件 + データフロー13段 + 集計5段 + 帳票18項目 + 因果62 + 集計26 + 帳票42 + 詳細72。
+**「STABRO互換56項目」の実体を特定した**
+外部指示の「STABRO互換56項目」は、リポジトリ内のドキュメントには存在しない
+(git 全履歴・全ブランチを検索して 0 件)。一方、**前回基準コミット `022269a` 時点の
+E2Eテストはちょうど56件**であり、これが実測で一致する唯一の集合である
+(`git worktree add` で `022269a` を分離し `playwright test --list` で確認。
+ 内訳: app 21 / design-matrix 11 / responsive 14 / ui-quality 10)。
+よって「56/56 PASS」は **このE2E 56件が全てPASSすること** として検証する。
+
+- 基準リスト: `stabro-56-baseline.mjs`(022269aの実測を転記)
+- 存在確認テスト: `stabro-compat-56.test.mjs`(`npm test` に組込み)
+- 合否判定: `npm run verify:56`(56/56 PASS で終了コード0)
+
+なお、負荷計算そのもののマトリクス(`docs/STABRO-COMPATIBILITY-MATRIX.md`)は
+別軸の検証であり、負荷項目13件 + データフロー13段 + 集計5段 + 帳票18項目で構成される。
+非公開係数に起因するFAIL 6件と真の未実装2件は、値を創作せず `notVerified` /
+`implemented:false` として明示したまま維持する。
+
+### UI文言と実装範囲の整合(回帰防止)
+詳細方式(`computeDetailedLoad`)は外皮・窓・日射・照明・機器発熱・すきま風・外気負荷・
+湿度・時刻別を実装済みだが、旧文言は「詳細方式は未実装」「入力値は計算に反映されない」と
+表示しており、実装と矛盾していた(2026-09-16修正)。
+
+- 概算値(面積原単位方式)に積み上げないことと、R6詳細方式の帳票で算入することの
+  **両方**を `report-data.mjs` の `ESTIMATE_NOTICES` / `step-screens.jsx` で明示する。
+- 真の未実装(ダクト・配管表面、空気漏洩、送風機・ポンプ運転、間欠空調の蓄熱)は
+  引き続き「未実装」として明示し、隠さない。
+- `ui-consistency.test.mjs`(`npm test` に組込み)が旧文言の再混入を検出する。
+- `hvac-calc-engine.js` と `hvac-load-calculator.jsx` の同期領域(SHARED-LOGIC、
+  `loadComponents` を含む283行)は `check:sync` の対象のため**変更しない**。
 
 ## 既知の制約
 

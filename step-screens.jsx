@@ -193,7 +193,7 @@ function ConditionsStep({ project, actions }) {
     <Panel title="4. 室内条件" subtitle="室内設定温度・湿度・運転時間を室ごとに入力します。" tone="accent">
       <div className="mb-4">
         <Note tone="warn">
-          室内設定温度は温度補正係数として計算に反映されます。湿度・運転時間は現行の計算方式(面積原単位方式)では負荷に反映されません(記録用)。
+          室内設定温度は温度補正係数として計算に反映されます。湿度はR6詳細方式の帳票(外気潜熱)で算入し、この画面の概算値(面積原単位方式)では負荷に反映しません。運転時間は現行方式では負荷に反映しません(記録用)。
         </Note>
       </div>
       <RoomList
@@ -260,10 +260,10 @@ function OccupancyStep({ project, actions, calc, engine }) {
 
 function InternalHeatStep({ project, actions }) {
   return (
-    <Panel title="6. 照明 / 機器発熱" subtitle="内部発熱の参考入力です。" tone="accent">
+    <Panel title="6. 照明 / 機器発熱" subtitle="室ごとの照明・機器発熱を入力します(詳細方式の帳票で積み上げ)。" tone="accent">
       <div className="mb-4">
         <Note tone="warn">
-          現行の計算方式(面積原単位方式)は照明・機器発熱を個別に積み上げません。ここでの入力は記録・将来の詳細計算用で、負荷計算結果には反映されません。
+          照明・機器発熱はR6詳細方式の熱負荷計算書(詳細帳票)で個別に積み上げます。この画面の概算値(面積原単位方式)には含めていません。
         </Note>
       </div>
       <RoomList
@@ -289,7 +289,7 @@ function OutdoorAirStep({ project, actions, calc }) {
     <Panel title="7. 外気 / 換気" subtitle="外気量・換気方式・全熱交換の条件を入力します。" tone="accent">
       <div className="mb-4">
         <Note tone="warn">
-          換気量は「在室人数 × 用途別原単位」で自動算出します。外気負荷(熱量)は現行の計算方式では設計用必要負荷に加算していません。
+          換気量は「在室人数 × 用途別原単位」で自動算出します。外気負荷(熱量)はR6詳細方式の帳票で算入し、この画面の概算値(面積原単位方式)には加算していません。
         </Note>
       </div>
       <RoomList
@@ -342,10 +342,10 @@ function OutdoorAirStep({ project, actions, calc }) {
 
 function EnvelopeStep({ project, actions }) {
   return (
-    <Panel title="8. 外皮 / 窓" subtitle="外壁・屋根・床・開口部の参考入力です。" tone="accent">
+    <Panel title="8. 外皮 / 窓" subtitle="室ごとの外壁・屋根・床・開口部を入力します(詳細方式の帳票で積み上げ)。" tone="accent">
       <div className="mb-4">
         <Note tone="warn">
-          外皮・窓・方位・日射の詳細計算(詳細方式)は未実装です。入力値は記録用で、負荷計算結果には反映されません。
+          外皮・窓・方位・日射は「8. 外皮 / 窓」で入力し、R6詳細方式の熱負荷計算書(詳細帳票)で積み上げます。この画面の概算値(W/m²原単位方式)には含めていません。
         </Note>
       </div>
       <RoomList
@@ -438,13 +438,14 @@ function CalcStep({ project, calc, stepStatus, engine, onGoResult, onJump }) {
         </Table>
       </Panel>
 
-      <Panel title="未実装・計算に反映されない項目" subtitle="現行の計算エンジンの適用範囲を明示します。">
+      <Panel title="この概算値(面積原単位方式)に含まれない項目" subtitle="上段の概算値の適用範囲です。詳細方式の帳票では下記を積み上げます。">
         <ul className="leading-relaxed" style={{ color: T.gray, fontSize: 12 }}>
-          <li>・外皮(外壁・屋根・床)の貫流熱負荷</li>
-          <li>・窓の貫流熱・日射熱取得</li>
-          <li>・照明・機器の内部発熱の個別積み上げ</li>
-          <li>・外気負荷の熱量換算(換気量[m³/h]の算出のみ)</li>
-          <li>・すきま風、湿度、時刻別(ピーク時刻)計算</li>
+          <li>・外皮(外壁・屋根・床)の貫流熱負荷 → R6詳細方式の帳票で算入</li>
+          <li>・窓の貫流熱・日射熱取得 → R6詳細方式の帳票で算入</li>
+          <li>・照明・機器の内部発熱の個別積み上げ → R6詳細方式の帳票で算入</li>
+          <li>・外気負荷の熱量換算 → R6詳細方式の帳票で算入(概算値では換気量[m³/h]の算出のみ)</li>
+          <li>・すきま風、湿度、時刻別(ピーク時刻)計算 → R6詳細方式の帳票で算入</li>
+          <li>・ダクト・配管表面、空気漏洩、送風機・ポンプ運転、間欠空調の蓄熱 → 未実装</li>
         </ul>
         <div className="mt-3">
           <Note tone="warn">用途別W/m²原単位・地域係数・温度補正はいずれも本アプリの暫定値です。実施設計・発注・法規判定の代替にはなりません。</Note>
