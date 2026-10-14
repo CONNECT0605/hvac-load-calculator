@@ -4,15 +4,29 @@
 // 変更する場合は、必ずこのブロックをコピーしてjsx側の対応箇所を置き換えてください。
 // 整合性は hvac-calc-engine.sync-check.js で機械的に検証できます。
 
+// 【構造変更 2026-09-02】各原単位をvalue/unit/status/source/confirmedDate/noteを持つ
+// メタデータオブジェクトに変更。数値そのもの(value)は一切変更していません。
+// status: "provisional"(正式根拠未確認の暫定値) | "verified"(規格原本等で確認済み・現時点で該当なし)
+function wm2(value, note) {
+  return {
+    value,
+    unit: "W/m2",
+    status: "provisional",
+    source: "本アプリの暫定仮定値。SHASE-S112等の正式根拠は未確認(2026-09-02時点)。",
+    confirmedDate: null,
+    note: note || "正式な国基準・SHASE-S112の数値ではありません。calculation-method-spec-v3.md参照。",
+  };
+}
+
 const BUILDING_TYPES = [
-  { id: "office", label: "オフィス", coolingWm2: 172, heatingWm2: 122, ventPerPerson: 30 },
-  { id: "retail", label: "店舗(物販)", coolingWm2: 209, heatingWm2: 151, ventPerPerson: 30 },
-  { id: "restaurant", label: "飲食店", coolingWm2: 244, heatingWm2: 174, ventPerPerson: 30 },
-  { id: "hotel", label: "ホテル客室", coolingWm2: 116, heatingWm2: 105, ventPerPerson: 25 },
-  { id: "hospital", label: "病院(病室)", coolingWm2: 140, heatingWm2: 116, ventPerPerson: 25 },
-  { id: "school", label: "学校(教室)", coolingWm2: 105, heatingWm2: 93, ventPerPerson: 20 },
-  { id: "factory", label: "工場・倉庫", coolingWm2: 93, heatingWm2: 81, ventPerPerson: 15 },
-  { id: "residential", label: "集合住宅", coolingWm2: 81, heatingWm2: 70, ventPerPerson: 20 },
+  { id: "office", label: "オフィス", coolingWm2: wm2(172), heatingWm2: wm2(122), ventPerPerson: 30 },
+  { id: "retail", label: "店舗(物販)", coolingWm2: wm2(209), heatingWm2: wm2(151), ventPerPerson: 30 },
+  { id: "restaurant", label: "飲食店", coolingWm2: wm2(244), heatingWm2: wm2(174), ventPerPerson: 30 },
+  { id: "hotel", label: "ホテル客室", coolingWm2: wm2(116), heatingWm2: wm2(105), ventPerPerson: 25 },
+  { id: "hospital", label: "病院(病室)", coolingWm2: wm2(140), heatingWm2: wm2(116), ventPerPerson: 25 },
+  { id: "school", label: "学校(教室)", coolingWm2: wm2(105), heatingWm2: wm2(93), ventPerPerson: 20 },
+  { id: "factory", label: "工場・倉庫", coolingWm2: wm2(93), heatingWm2: wm2(81), ventPerPerson: 15 },
+  { id: "residential", label: "集合住宅", coolingWm2: wm2(81), heatingWm2: wm2(70), ventPerPerson: 20 },
 ];
 // 【出典】上記W/m²原単位は、いずれも「本アプリの概算仮定」です。外部の公的資料・
 // 業界標準資料と突き合わせた数値ではありません。人体発熱(人体顕熱・潜熱)が
@@ -134,8 +148,8 @@ function computeLoad(input) {
   }
 
   // ① 概算負荷(面積ベースのみ。出典未確認の本アプリ仮定)
-  const roughLoadCoolingKW = (area * buildingType.coolingWm2 * region.coolingFactor * tempFactorCooling) / 1000;
-  const roughLoadHeatingKW = (area * buildingType.heatingWm2 * region.heatingFactor * tempFactorHeating) / 1000;
+  const roughLoadCoolingKW = (area * buildingType.coolingWm2.value * region.coolingFactor * tempFactorCooling) / 1000;
+  const roughLoadHeatingKW = (area * buildingType.heatingWm2.value * region.heatingFactor * tempFactorHeating) / 1000;
 
   // 人体負荷(参考値。常に計算するが、includeOccupant=falseの間は設計用必要負荷に含めない)
   const occupantSensibleKW = (nOccupants * OCCUPANT_HEAT.sensibleWPerPerson) / 1000;
@@ -162,6 +176,38 @@ function computeLoad(input) {
   const ventilationM3h = nOccupants * buildingType.ventPerPerson;
   const ventilationPerArea = area > 0 ? ventilationM3h / area : 0;
 
+  // 【構造追加 2026-09-02】この負荷がどの計算方式(A:原単位方式/B:詳細方式)で
+  // 構成されたかを追跡する。数値計算そのものには一切影響しない。
+  // "unit_load"            = 原単位(W/m²)のみ
+  // "unit_load_with_occupant_addon" = 原単位 + 人体負荷を明示的に加算(二重計上リスクを伴うハイブリッド)
+  // "detailed"             = 窓・外皮・照明・機器発熱等を個別積み上げる方式(未実装、将来用の予約値)
+  const calculationMethod = includeOccupant ? "unit_load_with_occupant_addon" : "unit_load";
+
+  const loadComponents = {
+    method: calculationMethod,
+    areaBasedCoefficient: {
+      included: true,
+      coolingWm2: buildingType.coolingWm2.value,
+      heatingWm2: buildingType.heatingWm2.value,
+      status: buildingType.coolingWm2.status,
+      coolingKW: roughLoadCoolingKW,
+      heatingKW: roughLoadHeatingKW,
+    },
+    occupantSensibleLatent: {
+      included: includeOccupant,
+      coolingKW: includeOccupant ? occupantSensibleKW + occupantLatentKW : 0,
+      note: includeOccupant
+        ? "原単位に人体発熱が既に含まれているか未確認のため、二重計上のリスクが理論上ゼロではありません"
+        : "既定では未算入(算出のみ行い、設計用必要負荷には加算していません)",
+    },
+    envelope: { included: false, note: "詳細方式(B)未実装のため常にfalse" },
+    windowSolar: { included: false, note: "詳細方式(B)未実装のため常にfalse" },
+    lighting: { included: false, note: "詳細方式(B)未実装のため常にfalse" },
+    equipmentHeat: { included: false, note: "詳細方式(B)未実装のため常にfalse" },
+    outdoorAir: { included: false, note: "換気量[m³/h]は算出しているが、熱量化・設計用必要負荷への加算はしていない" },
+    infiltration: { included: false, note: "詳細方式(B)未実装のため常にfalse" },
+  };
+
   return {
     status: "ok",
     warnings,
@@ -169,6 +215,9 @@ function computeLoad(input) {
     floorAreaTotal: area,
     floors: nFloors,
     areaInputMode: "total_only", // 簡易モードは常にこの値。詳細モードで"per_floor"等を追加予定(未実装)
+    // 計算方式の識別(構造追加。数値には影響しない)
+    calculationMethod,
+    loadComponents,
     // ① 概算負荷
     roughLoadCoolingKW,
     roughLoadHeatingKW,
