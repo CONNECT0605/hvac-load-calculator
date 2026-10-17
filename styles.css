@@ -181,3 +181,26 @@ input[type="number"] {
     background: #ffffff;
   }
 }
+
+
+/* Prevent grid children from forcing horizontal overflow on narrow screens. */
+.grid > * {
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  main,
+  main > div,
+  main section,
+  main nav {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  main input,
+  main select,
+  main textarea,
+  main table {
+    max-width: 100%;
+  }
+}
