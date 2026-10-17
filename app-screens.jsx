@@ -30,15 +30,15 @@ export function AppHeader({ projectName, screen, onNavigate, onSave, saveDisable
   ];
   return (
     <header className="no-print bg-white" style={{ borderBottom: `1px solid ${T.line}` }}>
-      <div className="px-6 flex items-center justify-between gap-6" style={{ maxWidth: 1440, margin: "0 auto", minHeight: 56 }}>
-        <div className="flex items-baseline gap-3 min-w-0">
+      <div className="px-4 sm:px-6 py-3 sm:py-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ maxWidth: 1440, margin: "0 auto", minHeight: 56 }}>
+        <div className="flex items-baseline gap-3 min-w-0 max-w-full">
           <span className="title-tight truncate-safe" style={{ color: T.ink, fontSize: 15 }}>
             空調負荷計算
             <span style={{ color: T.grayLight, fontWeight: 400, marginLeft: 6, fontSize: 12 }}>/ 機器選定</span>
           </span>
           <span className="truncate-safe" style={{ color: T.grayLight, fontSize: 11 }}>{projectName || "―"}</span>
         </div>
-        <nav className="flex items-center gap-1 shrink-0">
+        <nav className="flex flex-wrap items-center gap-1 min-w-0 max-w-full">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -55,7 +55,7 @@ export function AppHeader({ projectName, screen, onNavigate, onSave, saveDisable
               {tab.label}
             </button>
           ))}
-          <div className="ml-3">
+          <div className="ml-0 sm:ml-3">
             <Button variant="primary" size="sm" onClick={onSave} disabled={saveDisabled}>案件を保存</Button>
           </div>
         </nav>
