@@ -102,10 +102,34 @@ test.describe("デザインA/B/C 機能等価性", () => {
         await page.goto(`/?design=${d}`);
         await page.getByRole("button", { name: "新規案件", exact: true }).first().click();
         await page.waitForTimeout(500);
-        const overflow = await page.evaluate(
-          () => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
-        );
-        expect(overflow, `Design ${d} ${w}px で横スクロール ${overflow}px`).toBe(0);
+        const overflowInfo = await page.evaluate(() => {
+          const root = document.documentElement;
+          const overflow = Math.max(0, root.scrollWidth - root.clientWidth);
+          const offenders = [...document.querySelectorAll("body *")]
+            .map((el) => {
+              const rect = el.getBoundingClientRect();
+              const style = getComputedStyle(el);
+              return {
+                tag: el.tagName.toLowerCase(),
+                testId: el.getAttribute("data-testid"),
+                className: typeof el.className === "string" ? el.className.slice(0, 100) : "",
+                text: (el.innerText || "").trim().replace(/\s+/g, " ").slice(0, 60),
+                left: Math.round(rect.left),
+                right: Math.round(rect.right),
+                width: Math.round(rect.width),
+                position: style.position,
+                overflowX: style.overflowX,
+              };
+            })
+            .filter((el) => el.right > root.clientWidth + 1 || el.left < -1)
+            .sort((a, b) => b.right - a.right)
+            .slice(0, 12);
+          return { overflow, offenders };
+        });
+        expect(
+          overflowInfo.overflow,
+          `Design ${d} ${w}px で横スクロール ${overflowInfo.overflow}px。はみ出し要素: ${JSON.stringify(overflowInfo.offenders)}`,
+        ).toBe(0);
       }
     });
 
