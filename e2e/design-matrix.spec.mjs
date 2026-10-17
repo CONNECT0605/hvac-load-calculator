@@ -113,7 +113,7 @@ test.describe("デザインA/B/C 機能等価性", () => {
                 tag: el.tagName.toLowerCase(),
                 testId: el.getAttribute("data-testid"),
                 className: typeof el.className === "string" ? el.className.slice(0, 100) : "",
-                text: (el.innerText || "").trim().replace(/\\s+/g, " ").slice(0, 60),
+                text: (el.innerText || "").trim().replace(/\s+/g, " ").slice(0, 60),
                 left: Math.round(rect.left),
                 right: Math.round(rect.right),
                 width: Math.round(rect.width),
